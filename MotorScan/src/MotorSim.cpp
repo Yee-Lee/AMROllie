@@ -30,7 +30,7 @@ bool MotorSim::update() {
                 // 線性映射公式
                 _currRPM = (float)(absPWM - _minPWM) * _maxRPM / (_satPWM - _minPWM);
             }
-            
+
             _lastUpdate = now;
             return true;
         }

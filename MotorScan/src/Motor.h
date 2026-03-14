@@ -32,7 +32,7 @@ private:
 public:
     // 建構子參數：IN1, IN2, PWM, EncA, EncB, CPR, 更新頻率
     Motor(int in1, int in2, int pwm, int encA, int encB, int cpr, bool reverse, int interval = 10);
-    
+
     void init() override;
     bool update() override;
     float getCurrRPM() override;

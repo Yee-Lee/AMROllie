@@ -55,7 +55,7 @@ const char index_html[] PROGMEM = R"rawliteral(
             height: 100%;
             box-sizing: border-box;
         }
-        
+
         #terminal { 
             flex: 1; 
             overflow-y: auto; 
@@ -105,7 +105,7 @@ const char index_html[] PROGMEM = R"rawliteral(
             </select>
             <span id="motorLockMsg" style="font-size: 0.75rem; color: var(--danger); display: none;"> [LOCKED]</span>
         </div>
-        
+
         <div class="main-layout">
             <div class="chart-section">
                 <canvas id="rpmChart"></canvas>

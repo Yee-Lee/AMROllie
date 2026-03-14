@@ -10,11 +10,11 @@
 static uint8_t next_ledc_channel = 0; 
 
 Motor::Motor(int in1, int in2, int pwm, int encA, int encB, int cpr, bool reverse, int interval) 
-    : _pinIN1(in1), _pinIN2(in2), _pinPWM(pwm), 
-      _pinEncA(encA), _pinEncB(encB), 
-      _cpr(cpr), _isReversed(reverse), _updateInterval(interval), 
+    : _pinIN1(in1), _pinIN2(in2), _pinPWM(pwm),
+      _pinEncA(encA), _pinEncB(encB),
+      _cpr(cpr), _isReversed(reverse), _updateInterval(interval),
       _pos(0), _currRPM(0), _lastUpdate(0) {
-    
+
     _ledcChannel = next_ledc_channel++;
 }
 
@@ -22,7 +22,7 @@ void IRAM_ATTR Motor::isrWrapper(void* arg) {
     Motor* instance = (Motor*)arg;
     // 讀取 B 相判斷方向
     bool stateB = digitalRead(instance->_pinEncB);
-    
+
     // 如果設定了反相，則將計數方向取反
     if (instance->_isReversed) {
         stateB ? instance->_pos-- : instance->_pos++;
@@ -42,7 +42,7 @@ void Motor::init() {
     pinMode(_pinEncB, INPUT_PULLUP);
     
     attachInterruptArg(digitalPinToInterrupt(_pinEncA), isrWrapper, this, RISING);
-    
+
     stop(); 
     _lastUpdate = millis();
 }
@@ -72,7 +72,7 @@ float Motor::getCurrRPM() { return _currRPM; }
 
 void Motor::drive(int pwm) {
     int activePWM = pwm;
-    
+
     activePWM = constrain(activePWM, -255, 255);
 
     if (activePWM > 0) {
@@ -85,7 +85,7 @@ void Motor::drive(int pwm) {
         stop();
         return;
     }
-    
+
     ledcWrite(_ledcChannel, abs(activePWM));
 }
 

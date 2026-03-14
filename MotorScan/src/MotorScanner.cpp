@@ -16,7 +16,6 @@ void MotorScanner::begin(IMotor *motor) {
     _timerStart = millis();
     _scannerState = SCAN;
     Serial.println("Scanner Begin");
-    Serial.printf("scanner's motor=0x%x\n", (uint32_t)_motor);
     _motor->drive(_currentPWM);
 }
 
@@ -42,7 +41,6 @@ void MotorScanner::reset() {
     _scannerState = IDLE;
     _timerStart = 0;
     Serial.println("Scanner Reset");
-    //_motor->drive(_currentPWM);
     _motor->stop();
 }
 
