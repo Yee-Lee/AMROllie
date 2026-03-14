@@ -13,17 +13,21 @@
 
 class MotorSim : public IMotor {
 private:
-    float maxRPM;
-    int updateInterval;
-    float currRPM;
-    int currentPWM;
     unsigned long lastUpdate;
+    float _maxRPM;
+    int _updateInterval;
+    float _currRPM;
+    int _currentPWM;
+    unsigned long _lastUpdate;
+    int _minPWM;
+    int _satPWM;
 
 public:
-    MotorSim(float maxR, int interval = 10);
+    MotorSim(float minPWM, float satPWM, float maxR, int interval=50) ;
     void init() override;
     bool update() override;
     float getCurrRPM() override;
+
     void drive(int pwm) override;
     void stop() override;
 };
