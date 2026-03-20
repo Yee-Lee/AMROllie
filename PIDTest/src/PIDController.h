@@ -64,6 +64,9 @@ public:
         float dt = (now - lastTime) / 1000000.0f;
         lastTime = now;
 
+        //這邊幫 motor update
+        motor->update();
+
         float currentRPM = motor->getCurrRPM();
         float error = targetRPM - currentRPM;
 
@@ -104,7 +107,7 @@ public:
         }
 
         // Serial.printf("[PID] RPM: %6.2f, Err: %6.2f, P: %6.2f, I: %6.2f, D: %6.2f, PWM: %4d\n",
-        //                 currentRPM, error, p_term, i_term, d_term, pwmOut);
+        //                  currentRPM, error, p_term, i_term, d_term, pwmOut);
 
         motor->drive(pwmOut);
     }

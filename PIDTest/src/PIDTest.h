@@ -1,19 +1,20 @@
 /**
  * ============================================================================
  * 檔案: PIDTest.h
- * 描述: PID 步階響應測試
+ * 描述: 支援單輪或雙輪同步 PID 步階響應測試。
  * ============================================================================
  */
 #ifndef PIDTEST_H
 #define PIDTEST_H
 
 #include "PIDController.h"
+#include <Arduino.h>
 
 enum TestState { TEST_IDLE = 0, TEST_TESTING, TEST_DONE };
 
 class PIDTest {
 private:
-    PIDController* pid;
+    PIDController *pidL, *pidR;
     float startRpm, endRpm, stepRpm;
     unsigned long intervalMs, durationMs;
     
@@ -25,14 +26,20 @@ private:
 public:
     TestState state;
 
-    PIDTest(PIDController* p, float start, float end, float step, unsigned long interval, unsigned long duration)
-        : pid(p), startRpm(start), endRpm(end), stepRpm(step), 
+    PIDTest(PIDController* pL, PIDController* pR, float start, float end, float step, unsigned long interval, unsigned long duration)
+        : pidL(pL), pidR(pR), startRpm(start), endRpm(end), stepRpm(step), 
           intervalMs(interval), durationMs(duration), state(TEST_IDLE) {}
+
+    // 允許動態修改測試參數
+    void setParams(float start, float end, float step, unsigned long interval, unsigned long duration) {
+        startRpm = start; endRpm = end; stepRpm = step;
+        intervalMs = interval; durationMs = duration;
+    }
 
     void reset() {
         state = TEST_IDLE;
-        pid->setTarget(0);
-        pid->reset();
+        if (pidL) { pidL->setTarget(0); pidL->reset(); }
+        if (pidR) { pidR->setTarget(0); pidR->reset(); }
     }
 
     void begin() {
@@ -41,40 +48,51 @@ public:
         lastStepTime = startTime;
         lastPrintTime = startTime;
         currentTarget = startRpm;
-        pid->setTarget(currentTarget);
-        Serial.println("--- PID Test Started ---");
-        Serial.println("Time(ms),TargetRPM,CurrentRPM");
+        if (pidL) pidL->setTarget(currentTarget);
+        if (pidR) pidR->setTarget(currentTarget);
     }
 
-    void run(IMotor* motor) {
-        if (state != TEST_TESTING) return;
+    // 讓 run 傳回當前數據，方便網頁廣播
+    struct Telemetry {
+        unsigned long time;
+        float target;
+        float left;
+        float right;
+        bool updated;
+    };
+
+    Telemetry run(IMotor* motorL, IMotor* motorR) {
+        Telemetry data = {0, 0, 0, 0, false};
+        if (state != TEST_TESTING) return data;
         
         unsigned long now = millis();
 
-        // 檢查是否達到總測試時間
         if (now - startTime >= durationMs) {
             state = TEST_DONE;
-            pid->setTarget(0);
-            Serial.println("--- PID Test Done ---");
-            return;
+            if (pidL) pidL->setTarget(0);
+            if (pidR) pidR->setTarget(0);
+            return data;
         }
 
-        // 階躍邏輯處理
         if (intervalMs > 0 && (now - lastStepTime >= intervalMs)) {
             lastStepTime = now;
             if (currentTarget < endRpm) {
                 currentTarget += stepRpm;
                 if (currentTarget > endRpm) currentTarget = endRpm;
-                pid->setTarget(currentTarget);
+                if (pidL) pidL->setTarget(currentTarget);
+                if (pidR) pidR->setTarget(currentTarget);
             }
         }
 
-        //  telemetry 輸出 (每 50ms 印一次，供 Serial Plotter 繪圖)
         if (now - lastPrintTime >= 50) {
             lastPrintTime = now;
-            Serial.printf("[%5lu] Target: %6.2f, Current: %6.2f\n",
-                          now - startTime, currentTarget, motor->getCurrRPM());
+            data.time = now - startTime;
+            data.target = currentTarget;
+            data.left = (pidL && motorL) ? motorL->getCurrRPM() : 0;
+            data.right = (pidR && motorR) ? motorR->getCurrRPM() : 0;
+            data.updated = true;
         }
+        return data;
     }
 };
 
