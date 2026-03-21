@@ -2,7 +2,7 @@
  * ============================================================================
  * 檔案: Motor.cpp
  * 描述: 實體馬達驅動實作，採用 ESP32 LEDC (PWM) 硬體加速。
- * 修正: 實作 _isReversed 邏輯，統一物理運動方向與數據正負號。
+ * 修正: 完善負數 PWM 處理邏輯與方向控制。
  * ============================================================================
  */
 #include "Motor.h"
@@ -18,16 +18,29 @@ Motor::Motor(int in1, int in2, int pwm, int encA, int encB, int cpr, bool revers
     _ledcChannel = next_ledc_channel++;
 }
 
+/**
+ * 讀取 A, B 相判斷方向 (雙沿觸發 2x Decoding)
+ * 邏輯：
+ * 當 A 變動時，若 A == B 則為一向，A != B 則為另一向。
+ * 結合 _isReversed 修正物理安裝方向。
+ */
 void IRAM_ATTR Motor::isrWrapper(void* arg) {
     Motor* instance = (Motor*)arg;
-    // 讀取 B 相判斷方向
+    bool stateA = digitalRead(instance->_pinEncA);
     bool stateB = digitalRead(instance->_pinEncB);
 
-    // 如果設定了反相，則將計數方向取反
+    // 判斷旋轉方向
+    bool forward = (stateA == stateB);
+
+    // 如果硬體設定為反向，則將邏輯方向取反
     if (instance->_isReversed) {
-        stateB ? instance->_pos-- : instance->_pos++;
+        forward = !forward;
+    }
+
+    if (forward) {
+        instance->_pos++;
     } else {
-        stateB ? instance->_pos++ : instance->_pos--;
+        instance->_pos--;
     }
 }
 
@@ -35,13 +48,15 @@ void Motor::init() {
     pinMode(_pinIN1, OUTPUT);
     pinMode(_pinIN2, OUTPUT);
     
-    ledcSetup(_ledcChannel, 5000, 8);
+    // 設定 ESP32 PWM (LEDC)
+    ledcSetup(_ledcChannel, 5000, 8); // 5kHz, 8-bit 分辨率
     ledcAttachPin(_pinPWM, _ledcChannel);
     
     pinMode(_pinEncA, INPUT_PULLUP);
     pinMode(_pinEncB, INPUT_PULLUP);
     
-    attachInterruptArg(digitalPinToInterrupt(_pinEncA), isrWrapper, this, RISING);
+    // 設定 A 相為雙沿觸發 (CHANGE)，以獲得 2 倍解析度
+    attachInterruptArg(digitalPinToInterrupt(_pinEncA), isrWrapper, this, CHANGE);
 
     stop(); 
     _lastUpdate = millis();
@@ -50,14 +65,18 @@ void Motor::init() {
 bool Motor::update() {
     unsigned long now = millis();
     if (now - _lastUpdate >= _updateInterval) {
+        // 使用原子操作讀取並清除計數值
         portENTER_CRITICAL(&_mux);
         long count = _pos;
         _pos = 0; 
         portEXIT_CRITICAL(&_mux);
 
         float dt = (float)(now - _lastUpdate) / 1000.0f;
+        // RPM 計算公式: (脈衝數 / 每圈脈衝數) / 時間(分)
+        // 注意：因為是雙沿觸發，_cpr 應該定義為原本單沿 PPR * 2
         float rawRPM = ((float)count / (float)_cpr) / dt * 60.0f;
 
+        // 簡單的一階低通濾波，平滑轉速數據並過濾極端跳變
         if (abs(rawRPM) < 2000.0f) {
             _currRPM = (_currRPM * 0.7f) + (rawRPM * 0.3f);
         }
@@ -70,28 +89,38 @@ bool Motor::update() {
 
 float Motor::getCurrRPM() { return _currRPM; }
 
+/**
+ * 驅動馬達
+ * @param pwm 數值範圍 -255 到 255 (正數前進，負數後退)
+ */
 void Motor::drive(int pwm) {
-    int activePWM = pwm;
-
-    activePWM = constrain(activePWM, -255, 255);
+    // 限制範圍
+    int activePWM = constrain(pwm, -255, 255);
 
     if (activePWM > 0) {
+        // 正轉：IN1 高, IN2 低
         digitalWrite(_pinIN1, HIGH);
         digitalWrite(_pinIN2, LOW);
-    } else if (activePWM < 0) {
+        ledcWrite(_ledcChannel, activePWM);
+    } 
+    else if (activePWM < 0) {
+        // 反轉：IN1 低, IN2 高
         digitalWrite(_pinIN1, LOW);
         digitalWrite(_pinIN2, HIGH);
-    } else {
+        // PWM 控制必須輸入正值絕對值
+        ledcWrite(_ledcChannel, abs(activePWM));
+    } 
+    else {
+        // 輸出為 0，進入停止/剎車狀態
         stop();
-        return;
     }
-
-    ledcWrite(_ledcChannel, abs(activePWM));
 }
 
+/**
+ * 立即停止馬達輸出
+ */
 void Motor::stop() {
     digitalWrite(_pinIN1, LOW);
     digitalWrite(_pinIN2, LOW);
     ledcWrite(_ledcChannel, 0);
-
 }

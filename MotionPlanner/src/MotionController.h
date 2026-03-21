@@ -114,14 +114,13 @@ public:
         // 2. 限制最高速度 (Hard Limits)
         target_v = constrain(target_v, -maxV, maxV);
         target_w = constrain(target_w, -maxW, maxW);
-
         // 3. 處理加速度緩坡 (Slew Rate Limiter)
         float vStep = maxAccelV * dt;
         float wStep = maxAccelW * dt;
 
         currentV = applyRamp(target_v, currentV, vStep);
         currentW = applyRamp(target_w, currentW, wStep);
-
+Serial.printf("motion: curV:%.2f, curW:%.2f\n", currentV, currentW);
         // 4. 運動學逆解 (Inverse Kinematics)
         float rpm_left = 0.0f;
         float rpm_right = 0.0f;
