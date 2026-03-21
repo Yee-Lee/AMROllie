@@ -59,6 +59,13 @@ static const char index_html[] PROGMEM = R"raw(
             border-radius: 8px;
             padding: 10px;
             position: relative;
+            overflow-x: auto;
+        }
+
+        #chart-box {
+            width: 100%;
+            height: 100%;
+            position: relative;
         }
 
         /* Parameter Zones */
@@ -182,7 +189,9 @@ static const char index_html[] PROGMEM = R"raw(
     <div id="ui-container">
         <div id="main-panel">
             <div id="chart-wrapper">
-                <canvas id="pidChart"></canvas>
+                <div id="chart-box">
+                    <canvas id="pidChart"></canvas>
+                </div>
             </div>
             <div id="controls">
                 <!-- Left PID -->
@@ -268,8 +277,6 @@ static const char index_html[] PROGMEM = R"raw(
                         grid: { color: '#333' }
                     },
                     y: { 
-                        min: 0, 
-                        max: 150, 
                         title: { display: true, text: 'RPM', color: '#aaa' },
                         grid: { color: '#333' }
                     }
@@ -299,11 +306,21 @@ static const char index_html[] PROGMEM = R"raw(
             pidChart.data.datasets[1].data.push({x: t_sec, y: d.left});
             pidChart.data.datasets[2].data.push({x: t_sec, y: d.right});
 
+            var wrapper = document.getElementById('chart-wrapper');
+            var box = document.getElementById('chart-box');
+            var isAtEnd = (wrapper.scrollLeft + wrapper.clientWidth >= wrapper.scrollWidth - 50);
+
             if (t_sec > 10) {
-                pidChart.options.scales.x.min = t_sec - 10;
+                // 超過 10 秒後，動態增加寬度以維持解析度 (每 10 秒 100% 寬度)
+                box.style.width = (t_sec * 10.0) + "%";
                 pidChart.options.scales.x.max = t_sec;
             }
+
             pidChart.update('none');
+
+            if (isAtEnd) {
+                wrapper.scrollLeft = wrapper.scrollWidth;
+            }
 
             // 更新 Log Panel
             var logRow = document.createElement('div');
@@ -339,6 +356,7 @@ static const char index_html[] PROGMEM = R"raw(
                 pidChart.options.scales.x.min = 0;
                 pidChart.options.scales.x.max = 10;
                 pidChart.update();
+                document.getElementById('chart-box').style.width = '100%';
                 logContent.innerHTML = '';
 
                 var ids = ['lkp','lki','lkd','rkp','rki','rkd','start','end','step','int','dur'];
