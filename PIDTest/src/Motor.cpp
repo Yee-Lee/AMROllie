@@ -20,14 +20,15 @@ Motor::Motor(int in1, int in2, int pwm, int encA, int encB, int cpr, bool revers
 
 void IRAM_ATTR Motor::isrWrapper(void* arg) {
     Motor* instance = (Motor*)arg;
-    // 讀取 B 相判斷方向
+    // 讀取 A, B 相判斷方向 (雙沿觸發)
+    bool stateA = digitalRead(instance->_pinEncA);
     bool stateB = digitalRead(instance->_pinEncB);
 
     // 如果設定了反相，則將計數方向取反
     if (instance->_isReversed) {
-        stateB ? instance->_pos-- : instance->_pos++;
+        (stateA == stateB) ? instance->_pos-- : instance->_pos++;
     } else {
-        stateB ? instance->_pos++ : instance->_pos--;
+        (stateA == stateB) ? instance->_pos++ : instance->_pos--;
     }
 }
 
@@ -41,7 +42,7 @@ void Motor::init() {
     pinMode(_pinEncA, INPUT_PULLUP);
     pinMode(_pinEncB, INPUT_PULLUP);
     
-    attachInterruptArg(digitalPinToInterrupt(_pinEncA), isrWrapper, this, RISING);
+    attachInterruptArg(digitalPinToInterrupt(_pinEncA), isrWrapper, this, CHANGE);
 
     stop(); 
     _lastUpdate = millis();

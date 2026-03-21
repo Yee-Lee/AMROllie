@@ -18,24 +18,24 @@ enum SystemState { IDLE = 0, RUNNING = 1 };
 int currentState = IDLE;
 
 /* Simulated motors */
-MotorSim leftMotor = MotorSim(120.0f, 220.0f, 300.0f, 10); // update interval same as PID freq 
-MotorSim rightMotor = MotorSim(100.0f, 180.0f, 240.0f, 10);
-PIDController leftPID(&leftMotor, 2.0, 3.5, 0.001, 50.0, 100); 
-PIDController rightPID(&rightMotor, 2.0, 3.5, 0.001, 50.0, 100); 
+// MotorSim leftMotor = MotorSim(120.0f, 220.0f, 300.0f, 10); // update interval same as PID freq 
+// MotorSim rightMotor = MotorSim(100.0f, 180.0f, 240.0f, 10);
+// PIDController leftPID(&leftMotor, 2.0, 3.5, 0.001, 50.0, 100); 
+// PIDController rightPID(&rightMotor, 2.0, 3.5, 0.001, 50.0, 100); 
 
 /* Real motors*/
-// Motor leftMotor = Motor(12, 14, 13, 18, 34, 146, false, 10);
-// Motor rightMotor = Motor(27, 26, 25, 19, 35, 146, true, 10);
-// // 參數: Kp=2.0, Ki=5.0, Kd=0.1, 積分限幅=50, 頻率=100Hz
-// PIDController leftPID(&leftMotor, 2.0, 3.0, 0.005, 50.0, 100); 
-// PIDController rightPID(&rightMotor, 2.0, 3.0, 0.005, 50.0, 100); 
+Motor leftMotor = Motor(12, 14, 13, 18, 34, 292, false, 5);
+Motor rightMotor = Motor(27, 26, 25, 19, 35, 292, true, 5);
+// 參數: Kp=2.0, Ki=5.0, Kd=0.1, 積分限幅=50, 頻率=100Hz
+PIDController leftPID(&leftMotor, 1.7, 3.8, 0.005, 50.0, 100); 
+PIDController rightPID(&rightMotor, 1.7, 3.8, 0.005, 50.0, 100); 
 
 MotorWebUI webUI;
 
 
 // 測試參數: 起始 20 RPM, 終點 100 RPM, 每次增加 20 RPM, 區間 2000ms, 總時長 10000ms
 PIDTest pidTest(&leftPID, &rightPID,
-    40.0, 100.0, 20.0, 0, 5000);
+    60.0, 100.0, 0.0, 1000, 10000);
 
 unsigned long lastWebUpdate = 0;
 unsigned long lastSerialPrint = 0;
@@ -79,7 +79,9 @@ void handleWebCommands(String msg) {
         // 3. 觸發測試開始
         pidTest.begin();
         currentState = RUNNING;
+        Serial.printf("%f, %f, %f, %f, %f\n", params[6], params[7], params[8], params[9], params[10]);
         Serial.println("WebUI: Test Started with new PID gains");
+
     } 
     else if (msg == "STOP") {
         // 僅重置測試狀態，不主動停止馬達
@@ -96,8 +98,8 @@ void setup() {
     leftMotor.init();
     rightMotor.init();
 
-    leftPID.setOffset(110);
-    rightPID.setOffset(90);
+    leftPID.setOffset(85);
+    rightPID.setOffset(85);
 
     leftPID.setTarget(0);
     rightPID.setTarget(0);

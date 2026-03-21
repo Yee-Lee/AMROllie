@@ -1,155 +1,407 @@
-/**
- * ============================================================================
- * 檔案: MotorWebUI.h
- * 描述: PID 步階響應測試專用 Web 介面 (Ollie System - 三色極簡版)
- * 更新: 
- * 1. 更新 PID 預設參數為 kp=2.0, ki=5.0, kd=0.001
- * 2. 視覺收斂為三色系：碳黑、螢光綠 (Left)、亮青藍 (Right)
- * 3. 強化圖表與 Log 的顏色對應性與滾動條修正
- * ============================================================================
- */
-#ifndef MOTOR_WEBUI_H
-#define MOTOR_WEBUI_H
+#ifndef MOTOR_WEB_UI_H
+#define MOTOR_WEB_UI_H
 
+#include <Arduino.h>
 #include <WiFi.h>
-#include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
+#include <esp_wifi.h> // 加入此標頭檔以控制 WiFi 省電模式
 
-const char index_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE html><html lang="zh-TW"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ollie PID Tuner</title><script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<style>
-  :root { --bg: #121212; --panel: #1e1e1e; --left: #00ff66; --right: #00e5ff; --txt: #e0e0e0; --dim: #666; }
-  body{background:var(--bg);color:var(--txt);font-family:monospace;margin:10px;display:flex;flex-direction:column;height:95vh;box-sizing:border-box;overflow:hidden;}
-  .flex{display:flex;gap:15px;} .col{flex-direction:column;} .flex-1{flex:1;min-height:0;}
-  .panel{background:var(--panel);border-radius:4px;padding:12px;display:flex;flex-direction:column;border:1px solid #2a2a2a;}
-  .log-container{flex:1; display:flex; flex-direction:column; min-height:0;}
-  .log-box{font-size:12px;overflow-y:scroll;overflow-x:hidden;white-space:pre;line-height:1.4;flex:1;background:#161616;padding:8px;border:1px solid #222;}
-  .ctrl-row{display:flex;gap:20px;align-items:center;margin-bottom:10px;}
-  .input-grp{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--dim);}
-  input{background:var(--bg);border:1px solid #333;color:var(--txt);width:50px;text-align:center;padding:4px;border-radius:2px;}
-  button{background:#333;color:var(--txt);border:none;padding:0 30px;cursor:pointer;font-weight:bold;height:35px;border-radius:2px;transition:0.2s;}
-  button:hover{background:#444;}
-  button.active{background:var(--txt);color:var(--bg);}
-  .label-l{color:var(--left);font-weight:bold;width:45px;}
-  .label-r{color:var(--right);font-weight:bold;width:45px;}
-  .label-t{color:var(--dim);font-weight:bold;width:45px;}
-  /* 滾動條樣式 */
-  .log-box::-webkit-scrollbar {width:4px;}
-  .log-box::-webkit-scrollbar-track {background:transparent;}
-  .log-box::-webkit-scrollbar-thumb {background:#444;border-radius:2px;}
-</style></head>
-<body>
-  <div class="flex" style="justify-content:space-between;margin-bottom:8px;font-size:0.75rem;color:var(--dim);letter-spacing:1px;">
-    <b>OLLIE PID TUNER v4.5</b><span>IP: <span id="ip"></span> | WS: <span id="ws">--</span></span>
-  </div>
-  
-  <div class="flex flex-1" style="margin-bottom:10px; min-height:0;">
-    <div class="panel flex-1" style="position:relative"><canvas id="chart"></canvas></div>
-    <div class="panel" style="width:320px; min-height:0;">
-      <div style="font-size:10px;color:var(--dim);border-bottom:1px solid #333;padding-bottom:5px;margin-bottom:5px;text-align:center;">TIME   | TAR | <span style="color:var(--left)">LEFT</span>  | <span style="color:var(--right)">RIGHT</span></div>
-      <div class="log-container"><div id="logBox" class="log-box"></div></div>
-    </div>
-  </div>
-
-  <div class="panel col">
-    <div class="ctrl-row">
-      <!-- 更新 PID 初始參數 -->
-      <div class="input-grp"><span class="label-l">L-PID</span> P <input id="lkp" value="2.0"> I <input id="lki" value="5.0"> D <input id="lkd" value="0.001"></div>
-      <div class="input-grp"><span class="label-r">R-PID</span> P <input id="rkp" value="2.0"> I <input id="rki" value="5.0"> D <input id="rkd" value="0.001"></div>
-    </div>
-    <div class="ctrl-row" style="margin-bottom:0;">
-      <div class="input-grp"><span class="label-t">TEST</span> Start <input id="tStart" value="20"> End <input id="tEnd" value="100"> Step <input id="tStep" value="0"> Interval <input id="tInt" value="1000"> Duration <input id="tDur" value="5000"></div>
-      <div style="flex:1;"></div>
-      <button id="btn" onclick="toggle()">START TEST</button>
-    </div>
-  </div>
-
-<script>
-  const $ = id => document.getElementById(id);
-  $('ip').innerText = location.hostname;
-  let ws, run = false;
-  
-  const c = new Chart($('chart').getContext('2d'), {
-    type: 'line',
-    data: { datasets: [
-      {label:'Target', borderColor:'#666', data:[], borderDash:[5,5], pointRadius:0, borderWidth:1, fill:false},
-      {label:'Left', borderColor:'#00ff66', data:[], pointRadius:0, borderWidth:1.5, fill:false, tension:0.1},
-      {label:'Right', borderColor:'#00e5ff', data:[], pointRadius:0, borderWidth:1.5, fill:false, tension:0.1}
-    ]},
-    options: { 
-      animation:false, responsive:true, maintainAspectRatio:false,
-      scales: { 
-        x: { type:'linear', min:0, max:30000, grid:{color:'#252525'}, ticks:{display:false} }, 
-        y: { min:0, max:300, grid:{color:'#252525'}, ticks:{color:'#555'} } 
-      },
-      plugins: { legend: { display:true, align:'end', labels:{color:'#888', boxWidth:12, font:{size:10}} } }
-    }
-  });
-
-  function init() {
-    ws = new WebSocket(`ws://${location.hostname}/ws`);
-    ws.onopen = () => $('ws').innerText = 'ON';
-    ws.onclose = () => { $('ws').innerText = 'OFF'; setTimeout(init, 2000); };
-    ws.onmessage = e => {
-      let p = e.data.split(',');
-      if(p[0] === 'D') {
-        let t=parseInt(p[1]), tar=parseFloat(p[2]), l=parseFloat(p[3]), r=parseFloat(p[4]);
-        c.data.datasets[0].data.push({x:t, y:tar});
-        c.data.datasets[1].data.push({x:t, y:l});
-        c.data.datasets[2].data.push({x:t, y:r});
+// ============================================================================
+// HTML / CSS / JS 原始碼 (儲存於 Flash)
+// ============================================================================
+static const char index_html[] PROGMEM = R"raw(
+<!DOCTYPE HTML>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>AMR Ollie PID Tuner</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Dark Mode & Simple Style */
+        body { 
+            background-color: #121212; 
+            color: #e0e0e0; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; 
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
         
-        let mx = t > 30000 ? t - 30000 : 0;
-        c.options.scales.x.min = mx; c.options.scales.x.max = mx + 30000;
-        if(c.data.datasets[0].data.length > 800) c.data.datasets.forEach(d => d.data.shift());
-        c.update('none');
+        /* UI Container 1600x800 */
+        #ui-container {
+            width: 1600px;
+            height: 800px;
+            background: #1e1e1e;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: row; 
+            overflow: hidden;
+            box-sizing: border-box;
+            padding: 20px;
+            gap: 20px;
+        }
 
-        const row = `${String(t).padStart(6)} | ${String(Math.round(tar)).padStart(3)} | <span style="color:var(--left)">${l.toFixed(1).padStart(5)}</span> | <span style="color:var(--right)">${r.toFixed(1).padStart(5)}</span>\n`;
-        const div = document.createElement('div'); div.innerHTML = row;
-        $('logBox').appendChild(div);
-        if($('logBox').childNodes.length > 100) $('logBox').removeChild($('logBox').firstChild);
-        $('logBox').scrollTop = $('logBox').scrollHeight;
-      } else if(p[0] === 'DONE') setUI(false);
-    };
-  }
+        /* Left Side: Chart + Controls */
+        #main-panel {
+            flex: 3;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            min-width: 0; 
+        }
+        
+        #chart-wrapper {
+            flex: 1;
+            background: #252525;
+            border-radius: 8px;
+            padding: 10px;
+            position: relative;
+        }
 
-  function toggle() {
-    if(!run) {
-      c.data.datasets.forEach(d=>d.data=[]); c.update('none'); $('logBox').innerHTML='';
-      let v = ['lkp','lki','lkd','rkp','rki','rkd','tStart','tEnd','tStep','tInt','tDur'].map(i=>$(i).value).join(',');
-      ws.send("START,"+v); setUI(true);
-    } else { ws.send('STOP'); setUI(false); }
-  }
+        /* Parameter Zones */
+        #controls {
+            height: 160px;
+            display: flex;
+            gap: 15px;
+            background: #252525;
+            border-radius: 8px;
+            padding: 15px;
+            box-sizing: border-box;
+        }
 
-  function setUI(s) { run=s; $('btn').innerText = s?"STOP":"START TEST"; $('btn').className = s?"active":""; }
-  window.onload = init;
-</script></body></html>
-)rawliteral";
+        .param-section {
+            flex: 1;
+            display: flex;
+            flex-wrap: wrap;
+            align-content: flex-start;
+            gap: 10px;
+            background: #1a1a1a;
+            padding: 10px;
+            border-radius: 6px;
+            border-top: 3px solid #555;
+        }
+        .param-section.left-pid { border-color: #e74c3c; flex: 1; } 
+        .param-section.right-pid { border-color: #2ecc71; flex: 1; } 
+        /* 增加測試參數區塊的權重，讓 5 個欄位有更多空間 */
+        .param-section.test-params { border-color: #3498db; flex: 2; } 
+
+        .section-title { width: 100%; font-size: 13px; font-weight: bold; color: #aaa; margin-bottom: 5px; text-transform: uppercase; }
+        
+        .input-group { display: flex; flex-direction: column; width: calc(33.3% - 7px); }
+        /* 針對 5 個欄位的特殊寬度計算 (約 20%) */
+        .input-group.five-cols { width: calc(20% - 8px); }
+        
+        label { font-size: 11px; color: #aaa; margin-bottom: 3px; white-space: nowrap; overflow: hidden; }
+        input { 
+            background: #333; 
+            color: #fff; 
+            border: 1px solid #444; 
+            border-radius: 4px; 
+            padding: 6px; 
+            font-size: 13px; 
+            width: 100%;
+            box-sizing: border-box;
+        }
+        input:focus { outline: none; border-color: #3498db; }
+        input:disabled { opacity: 0.4; cursor: not-allowed; } 
+
+        .btn-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 10px;
+        }
+
+        /* Single Toggle Button */
+        button { 
+            padding: 15px 40px; 
+            font-size: 20px; 
+            font-weight: bold; 
+            border: none; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            transition: all 0.2s; 
+            color: white;
+            background: #2ecc71; 
+            box-shadow: 0 4px 15px rgba(46, 204, 113, 0.3);
+            white-space: nowrap;
+        }
+        button:hover { filter: brightness(1.1); }
+        button:active { transform: scale(0.95); }
+        button.running { 
+            background: #e74c3c; 
+            box-shadow: 0 4px 15px rgba(231, 76, 60, 0.3);
+        }
+
+        /* Right Side: Log Panel */
+        #log-panel {
+            flex: 1;
+            background: #252525;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            padding: 15px;
+            min-width: 250px;
+        }
+
+        #log-panel h3 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+            color: #aaa;
+            text-transform: uppercase;
+            border-bottom: 1px solid #444;
+            padding-bottom: 8px;
+        }
+
+        #log-content {
+            flex: 1;
+            overflow-y: auto;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 17px; 
+            line-height: 1.5;
+            padding-right: 5px;
+        }
+
+        /* Scrollbar styling for log panel */
+        #log-content::-webkit-scrollbar { width: 8px; }
+        #log-content::-webkit-scrollbar-track { background: #1a1a1a; border-radius: 4px; }
+        #log-content::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+        
+        .log-row { display: flex; justify-content: space-between; border-bottom: 1px solid #333; padding: 4px 0; }
+        .log-time { color: #888; width: 75px;} 
+        .log-val { text-align: right; width: 60px;}
+        .val-tgt { color: #3498db; }
+        .val-l { color: #e74c3c; }
+        .val-r { color: #2ecc71; }
+    </style>
+</head>
+<body>
+    <div id="ui-container">
+        <div id="main-panel">
+            <div id="chart-wrapper">
+                <canvas id="pidChart"></canvas>
+            </div>
+            <div id="controls">
+                <!-- Left PID -->
+                <div class="param-section left-pid">
+                    <div class="section-title">Left Motor PID</div>
+                    <div class="input-group"><label>Kp</label><input type="number" step="0.1" id="lkp" value="2.0"></div>
+                    <div class="input-group"><label>Ki</label><input type="number" step="0.1" id="lki" value="3.5"></div>
+                    <div class="input-group"><label>Kd</label><input type="number" step="0.001" id="lkd" value="0.005"></div>
+                </div>
+                
+                <!-- Right PID -->
+                <div class="param-section right-pid">
+                    <div class="section-title">Right Motor PID</div>
+                    <div class="input-group"><label>Kp</label><input type="number" step="0.1" id="rkp" value="2.0"></div>
+                    <div class="input-group"><label>Ki</label><input type="number" step="0.1" id="rki" value="3.5"></div>
+                    <div class="input-group"><label>Kd</label><input type="number" step="0.001" id="rkd" value="0.005"></div>
+                </div>
+
+                <!-- Test Params - 調整為 5 個欄位併排 -->
+                <div class="param-section test-params">
+                    <div class="section-title">Test Profile</div>
+                    <div class="input-group five-cols"><label>Start RPM</label><input type="number" id="start" value="60"></div>
+                    <div class="input-group five-cols"><label>End RPM</label><input type="number" id="end" value="100"></div>
+                    <div class="input-group five-cols"><label>Step RPM</label><input type="number" id="step" value="00"></div>
+                    <div class="input-group five-cols"><label>Int(ms)</label><input type="number" id="int" value="1000"></div>
+                    <div class="input-group five-cols"><label>Dur(s)</label><input type="number" id="dur" value="10"></div>
+                </div>
+
+                <div class="btn-container">
+                    <button id="btn-toggle" onclick="toggleTest()">START</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="log-panel">
+            <h3>Data Log <span style="font-size:10px; color:#666; float:right;">(Tgt / L / R)</span></h3>
+            <div id="log-content"></div>
+        </div>
+    </div>
+
+    <script>
+        // (1) 防止進入省電模式 (Wake Lock)
+        let wakeLock = null;
+        async function requestWakeLock() {
+            try {
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                }
+            } catch (err) {
+                console.error(`${err.name}, ${err.message}`);
+            }
+        }
+        requestWakeLock();
+        document.addEventListener('visibilitychange', () => {
+            if (wakeLock !== null && document.visibilityState === 'visible') requestWakeLock();
+        });
+
+        // Chart.js 配置
+        Chart.defaults.color = '#888';
+        var ctx = document.getElementById('pidChart').getContext('2d');
+        var pidChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                datasets: [
+                    { label: 'Target RPM', borderColor: '#3498db', borderDash: [5, 5], data: [], pointRadius: 0, borderWidth: 2, tension: 0.1 },
+                    { label: 'Left RPM', borderColor: '#e74c3c', data: [], pointRadius: 0, borderWidth: 2, tension: 0.1 },
+                    { label: 'Right RPM', borderColor: '#2ecc71', data: [], pointRadius: 0, borderWidth: 2, tension: 0.1 }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false, 
+                animation: false,
+                plugins: {
+                    legend: { labels: { color: '#e0e0e0' } }
+                },
+                scales: {
+                    x: {
+                        type: 'linear',
+                        min: 0,
+                        max: 10, 
+                        title: { display: true, text: 'Time (s)', color: '#aaa' },
+                        grid: { color: '#333' }
+                    },
+                    y: { 
+                        min: 0, 
+                        max: 150, 
+                        title: { display: true, text: 'RPM', color: '#aaa' },
+                        grid: { color: '#333' }
+                    }
+                }
+            }
+        });
+
+        // WebSocket 設置
+        var ws = new WebSocket('ws://' + window.location.hostname + '/ws');
+        var isRunning = false;
+        var logContent = document.getElementById('log-content');
+        
+        ws.onmessage = function(event) {
+            var d = JSON.parse(event.data);
+            
+            // 處理測試完成的通知
+            if (d.type === "DONE") {
+                stopUIState();
+                return;
+            }
+
+            var t_sec = d.time / 1000.0; 
+            var t_ms = d.time; 
+            
+            // 更新圖表
+            pidChart.data.datasets[0].data.push({x: t_sec, y: d.target});
+            pidChart.data.datasets[1].data.push({x: t_sec, y: d.left});
+            pidChart.data.datasets[2].data.push({x: t_sec, y: d.right});
+
+            if (t_sec > 10) {
+                pidChart.options.scales.x.min = t_sec - 10;
+                pidChart.options.scales.x.max = t_sec;
+            }
+            pidChart.update('none');
+
+            // 更新 Log Panel
+            var logRow = document.createElement('div');
+            logRow.className = 'log-row';
+            logRow.innerHTML = `
+                <span class="log-time">${t_ms}ms</span>
+                <span class="log-val val-tgt">${d.target.toFixed(1)}</span>
+                <span class="log-val val-l">${d.left.toFixed(1)}</span>
+                <span class="log-val val-r">${d.right.toFixed(1)}</span>
+            `;
+            logContent.appendChild(logRow);
+            logContent.scrollTop = logContent.scrollHeight;
+        };
+
+        function stopUIState() {
+            var btn = document.getElementById('btn-toggle');
+            var inputs = document.querySelectorAll('input');
+            isRunning = false;
+            btn.innerText = "START";
+            btn.classList.remove('running');
+            inputs.forEach(i => i.disabled = false);
+        }
+
+        function toggleTest() {
+            var btn = document.getElementById('btn-toggle');
+            var inputs = document.querySelectorAll('input');
+
+            if (isRunning) {
+                ws.send("STOP");
+                stopUIState();
+            } else {
+                pidChart.data.datasets.forEach(ds => ds.data = []);
+                pidChart.options.scales.x.min = 0;
+                pidChart.options.scales.x.max = 10;
+                pidChart.update();
+                logContent.innerHTML = '';
+
+                var ids = ['lkp','lki','lkd','rkp','rki','rkd','start','end','step','int','dur'];
+                var vals = ids.map(id => document.getElementById(id).value);
+                ws.send("START," + vals.join(","));
+                
+                isRunning = true;
+                btn.innerText = "STOP";
+                btn.classList.add('running');
+                inputs.forEach(i => i.disabled = true);
+            }
+        }
+    </script>
+</body>
+</html>
+)raw";
 
 class MotorWebUI {
-private:
-    AsyncWebServer server;
-    AsyncWebSocket ws;
 public:
-    MotorWebUI() : server(80), ws("/ws") {}
-    void begin(const char* ssid, const char* pass) {
-        WiFi.begin(ssid, pass);
-        while (WiFi.status() != WL_CONNECTED) delay(500);
-
-        Serial.println(WiFi.localIP());
-        server.addHandler(&ws);
-        server.on("/", HTTP_GET, [](AsyncWebServerRequest *r){ r->send(200, "text/html", index_html); });
-        server.begin();
-    }
-    void broadcastData(unsigned long t, float target, float left, float right) {
-        if (ws.count() > 0 && ws.availableForWriteAll()) {
-            char buf[128];
-            snprintf(buf, sizeof(buf), "D,%lu,%.1f,%.1f,%.1f", t, target, left, right);
-            ws.textAll(buf);
+    inline MotorWebUI() : _server(80), _ws("/ws") {}
+    
+    inline void begin(const char* ssid, const char* password) {
+        WiFi.begin(ssid, password);
+        Serial.print("Connecting to WiFi");
+        while (WiFi.status() != WL_CONNECTED) { 
+            delay(500); 
+            Serial.print("."); 
         }
+        
+        // 核心設定：禁用 WiFi 省電模式以確保 Full Power / 低延遲
+        esp_wifi_set_ps(WIFI_PS_NONE); 
+        WiFi.setSleep(false); 
+        
+        Serial.println("\nConnected!");
+        Serial.print("WebUI IP Address: ");
+        Serial.println(WiFi.localIP());
+
+        _server.addHandler(&_ws);
+        _server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){ 
+            request->send(200, "text/html", index_html); 
+        });
+        _server.begin();
     }
-    void notifyDone() { ws.textAll("DONE"); }
-    void cleanup() { ws.cleanupClients(); }
-    AsyncWebSocket* getWS() { return &ws; }
+    
+    inline void cleanup() { _ws.cleanupClients(); }
+    inline AsyncWebSocket* getWS() { return &_ws; }
+    
+    // 廣播感測器數據到網頁
+    inline void broadcastData(int time_ms, float target, float left, float right) {
+        char msg[128];
+        snprintf(msg, sizeof(msg), "{\"time\":%d,\"target\":%.2f,\"left\":%.2f,\"right\":%.2f}", 
+                 time_ms, target, left, right);
+        _ws.textAll(msg);
+    }
+
+    // 通知網頁測試已完成
+    inline void notifyDone() { 
+        _ws.textAll("{\"type\":\"DONE\"}");
+    }
+
+private:
+    AsyncWebServer _server;
+    AsyncWebSocket _ws;
 };
-#endif
+
+#endif // MOTOR_WEB_UI_H
