@@ -15,6 +15,8 @@ public:
     virtual float getCurrRPM() = 0;
     virtual void drive(int pwm) = 0;
     virtual void stop() = 0;
+
+    virtual void print_details() {};
 };
 
 #endif

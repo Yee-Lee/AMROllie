@@ -12,21 +12,22 @@
 #include "MotorScanner.h"
 #include "config.h"
 
-enum SystemState { IDLE = 0, RUNNING = 1 };
+enum SystemState { IDLE = 0, RUNNING = 1};
 int currentState = IDLE;
+bool isManual = false;
 
 /* Simulated motors */
-IMotor* leftMotor = new MotorSim(120.0f, 220.0f, 300.0f, 50); 
-IMotor* rightMotor = new MotorSim(100.0f, 180.0f, 240.0f, 50);
+//IMotor* leftMotor = new MotorSim(120.0f, 220.0f, 300.0f, 50); 
+//IMotor* rightMotor = new MotorSim(100.0f, 180.0f, 240.0f, 50);
 
 /* Real motors*/
-// IMotor *leftMotor = new Motor(12, 14, 13, 18, 34, 146, false, 20);
-// IMotor *rightMotor = new Motor(27, 26, 25, 19, 35, 146, true, 20);
+IMotor *leftMotor = new Motor(12, 14, 13, 18, 34, 292, false, 10);
+IMotor *rightMotor = new Motor(27, 26, 25, 19, 35, 292, true, 10);
 
 IMotor* currentMotor = leftMotor;
 
 MotorScanner scanner(nullptr);
-MotorWebUI webUI(nullptr, &currentState);
+MotorWebUI webUI(nullptr, &currentState, &isManual);
 
 unsigned long lastWebUpdate = 0;
 unsigned long lastSerialPrint = 0;
@@ -52,25 +53,35 @@ void loop() {
         webUI.setCurrentMotor(currentMotor);
     }
     if (currentState == RUNNING) {
-        if (scanner.getScannerState() == MotorScanner::ScannerState::IDLE)
-            scanner.begin(currentMotor);
+        unsigned long now = millis();
+         
+        if (!isManual) {
+            if (scanner.getScannerState() == MotorScanner::ScannerState::IDLE)
+                scanner.begin(currentMotor);
 
-        if (scanner.getScannerState() == MotorScanner::ScannerState::SCAN)
-            scanner.run();
+            if (scanner.getScannerState() == MotorScanner::ScannerState::SCAN)
+                scanner.run();
 
-        if (currentMotor->update()) {
-            unsigned long now = millis();
-            float current = currentMotor->getCurrRPM();
-            //  Serial.printf("PWM: %d, RPM: %.2f\n", scanner.getCurrentPWM(), current);
-
-            // 每 100ms 更新一次網頁數據，避免傳輸過於頻繁
-            if (now - lastWebUpdate >= 100) {
-                float currentPWM = scanner.getCurrentPWM();
-                webUI.broadcastData(now, current, currentPWM, 
-                    sStateStr[scanner.getScannerState()]);
-                lastWebUpdate = now;
+            // 更新馬達
+            if (currentMotor->update()) {
+                float current = currentMotor->getCurrRPM();
+                Serial.printf(">PWM:%d|g\n", scanner.getCurrentPWM());
+                Serial.printf(">RPM:%.2f|g\n",current);
             }
-         }
+        }
+
+        // 每 100ms 更新一次網頁數據，避免傳輸過於頻繁
+        if (now - lastWebUpdate >= 100) {
+            float currentPWM = scanner.getCurrentPWM();
+            float current = currentMotor->getCurrRPM();
+            webUI.broadcastData(now, current, currentPWM, 
+                sStateStr[scanner.getScannerState()]);
+            lastWebUpdate = now;
+
+            // 更新打印手動測試
+            if (isManual)
+                currentMotor->print_details();
+        }
     } else if (currentState == IDLE) {
         if (scanner.getScannerState() != MotorScanner::ScannerState::IDLE) {
             scanner.reset();

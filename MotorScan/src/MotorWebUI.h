@@ -119,7 +119,11 @@ const char index_html[] PROGMEM = R"rawliteral(
             </div>
         </div>
 
-        <div class="btn-container">
+        <div class="btn-container" style="display:flex; align-items:center; justify-content:center; gap:20px;">
+            <div style="display:flex; align-items:center;">
+                <input type="checkbox" id="manualCheck" style="width:18px; height:18px; cursor:pointer;">
+                <label for="manualCheck" style="margin-left:8px; color:var(--text-dim); cursor:pointer;">manual test</label>
+            </div>
             <button id="stateBtn" class="btn-idle" onclick="toggleState()">Start System</button>
         </div>
     </div>
@@ -225,9 +229,11 @@ const char index_html[] PROGMEM = R"rawliteral(
             const btn = document.getElementById('stateBtn');
             const stateText = document.getElementById('systemState');
             const scanText = document.getElementById('scannerState');
+            const manualCheck = document.getElementById('manualCheck');
             
             if(isRunning) {
                 motorSelect.disabled = true;
+                manualCheck.disabled = true;
                 motorLockMsg.style.display = "inline";
                 startTime = Date.now();
                 terminal.innerHTML = '';
@@ -235,12 +241,13 @@ const char index_html[] PROGMEM = R"rawliteral(
                 chart.options.scales.x.min = 0;
                 chart.options.scales.x.max = 40;
                 chart.update();
-                ws.send("STATE,1");
+                ws.send("STATE,1," + (manualCheck.checked ? "1" : "0"));
                 stateText.textContent = "RUNNING";
                 stateText.style.color = "#10b981";
                 btn.textContent = "Stop System"; btn.className = "btn-running";
             } else {
                 motorSelect.disabled = false;
+                manualCheck.disabled = false;
                 motorLockMsg.style.display = "none";
                 ws.send("STATE,0");
                 stateText.textContent = "IDLE";
@@ -262,6 +269,7 @@ private:
     AsyncWebServer server;
     AsyncWebSocket ws;
     int* _state;       
+    bool* _manualMode;
     IMotor* _motor;    
     int selectedMotorIdx = 0; 
     bool motorChangedFlag = true; 
@@ -272,8 +280,15 @@ private:
             data[len] = 0;
             String msg = (char*)data;
             if (msg.startsWith("STATE,")) {
-                int newState = msg.substring(6).toInt();
-                *_state = newState;
+                String payload = msg.substring(6);
+                int commaIdx = payload.indexOf(',');
+                if (commaIdx != -1) {
+                    *_state = payload.substring(0, commaIdx).toInt();
+                    if (_manualMode) *_manualMode = (payload.substring(commaIdx + 1).toInt() == 1);
+                } else {
+                    *_state = payload.toInt();
+                }
+
                 if (*_state == 0 && _motor != nullptr) {
                     _motor->stop(); 
                 }
@@ -288,7 +303,7 @@ private:
     }
 
 public:
-    MotorWebUI(IMotor* m, int* s) : server(80), ws("/ws"), _motor(m), _state(s) {}
+    MotorWebUI(IMotor* m, int* s, bool* manual) : server(80), ws("/ws"), _motor(m), _state(s), _manualMode(manual) {}
 
     void setCurrentMotor(IMotor* m) { _motor = m; }
 

@@ -38,6 +38,8 @@ public:
     float getCurrRPM() override;
     void drive(int pwm) override;
     void stop() override;
+
+    void print_details();
 };
 
 #endif
