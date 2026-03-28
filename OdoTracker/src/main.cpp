@@ -18,7 +18,9 @@ void IRAM_ATTR mpuISR() {
 }
 
 // PID 參數 (p, i, d) 需要根據實際車體反應來調整
-AngularVelocityController angular_w_controller(0.1, 0.05, 0.01, 50); // P, I, D, 頻率
+// 注意：如果您目前是「把車輪架空」進行測試，請暫時將 I 設為 0 (例如: 0.1, 0.0, 0.01)
+// 否則陀螺儀讀不到轉動，I 項會無限累積導致馬達轉速暴走！
+AngularVelocityController angular_w_controller(0.1, 0.05, 0.01, 50); 
 float w_correction = 0.0f; // 用於儲存角速度 PID 的修正輸出
 
 /* --- 執行機構與 PID 定義 --- */
@@ -88,12 +90,22 @@ void loop() {
     }
     
     // 5. 靜止狀態防護：如果搖桿歸零且車體已停下，清除 PID 積分避免 I-term 累積 (Windup)
-    if (abs(tele.current_v) < 0.001f && abs(tele.current_w) < 0.001f) {
+    // 改為同時檢查目標指令為 0，且兩輪的實際轉速也降至極低 (< 2.0 RPM) 才算真正靜止
+    if (abs(tele.current_v) < 0.001f && abs(tele.current_w) < 0.001f && 
+        abs(leftMotor.getCurrRPM()) < 10.0f && abs(rightMotor.getCurrRPM()) < 10.0f) {
+        
         angular_w_controller.reset();
         w_correction = 0.0f;
+        // 若您的 PIDController 支援 reset，請在此處將其解開以清除馬達積分
+        // leftPID.reset();  
+        // rightPID.reset();
     } else {
         // 內部會自動判斷是否有新數據，若有才進行物理讀取與 PID 計算
         w_correction = angular_w_controller.update(tele.current_w, has_new_imu_data);
+        
+        // 加上限幅保護 (Anti-Windup)，防止陀螺儀異常或架空測試時修正量無限放大
+        // 假設合理的極限修正量為 ±1.5 rad/s (可依實車狀況微調)
+        w_correction = constrain(w_correction, -1.5f, 1.5f);
     }
 
     // 6. 數據監控輸出 
