@@ -30,6 +30,7 @@ static const char index_html[] PROGMEM = R"raw(
             height: 100vh;
             overflow: hidden;
             user-select: none;
+            touch-action: none;
             -webkit-user-select: none;
             display: flex;
             flex-direction: column;
@@ -84,7 +85,6 @@ static const char index_html[] PROGMEM = R"raw(
             transition: border-color 0.2s ease, box-shadow 0.2s ease;
         }
 
-        /* 只有操作中的圈圈會 Highlight */
         .joy-container.active {
             border-color: var(--accent);
             box-shadow: 0 0 30px rgba(0, 255, 136, 0.3);
@@ -96,7 +96,6 @@ static const char index_html[] PROGMEM = R"raw(
             background: var(--accent);
             border-radius: 50%;
             position: absolute;
-            /* 居中計算: (180-70)/2 = 55 */
             top: 55px;
             left: 55px;
             box-shadow: 0 0 15px rgba(0, 255, 136, 0.3);
@@ -138,7 +137,7 @@ static const char index_html[] PROGMEM = R"raw(
         }
 
         .btn-group {
-            grid-column: 1 / -1; /* 跨越兩欄 */
+            grid-column: 1 / -1;
             display: flex;
             gap: 6px;
             margin-top: 2px;
@@ -178,7 +177,7 @@ static const char index_html[] PROGMEM = R"raw(
 
     <div id="header">
         <div style="font-weight:bold; letter-spacing:1px;">OLLIE DUAL-STICK</div>
-        <button id="conn-btn" onclick="toggleConnection()">OFF</button>
+        <button id="conn-btn" onclick="toggleConnection()">CONNECTING...</button>
     </div>
 
     <div id="main-area">
@@ -207,17 +206,32 @@ static const char index_html[] PROGMEM = R"raw(
 
     <script>
         var ws = null;
-        let isConnected = false;
+        let isOperating = false;
         let isMotionTest = false;
         let currentV = 0, currentW = 0;
         const maxDist = 55; 
+        let retryTimeout = null;
 
-        // 建立具備自動重連機制的 WebSocket
+        window.addEventListener('beforeunload', () => {
+            clearTimeout(retryTimeout);
+            if (ws && ws.readyState === WebSocket.OPEN) { 
+                ws.onclose = null;
+                ws.close(); 
+            }
+        });
+
         function connectWS() {
+            console.log("Attempting to connect WebSocket...");
             ws = new WebSocket('ws://' + window.location.hostname + '/ws');
             ws.onopen = () => {
                 console.log("WebSocket connected.");
-                ws.send(`TEST,${isMotionTest ? 1 : 0}`); // 連線時，主動同步一次測試模式狀態
+                clearTimeout(retryTimeout);
+                const btn = document.getElementById('conn-btn');
+                btn.innerText = isOperating ? "ON" : "OFF";
+                btn.onclick = toggleConnection;
+                setTimeout(() => {
+                    if (ws && ws.readyState === WebSocket.OPEN) { ws.send(`TEST,${isMotionTest ? 1 : 0}`); }
+                }, 200);
             };
             ws.onmessage = (event) => {
                 if (event.data.startsWith("ODOM,")) {
@@ -230,41 +244,58 @@ static const char index_html[] PROGMEM = R"raw(
                 }
             };
             ws.onclose = () => {
-                console.log("WebSocket 斷線，2秒後嘗試重連...");
-                setTimeout(connectWS, 2000);
+                console.log("WebSocket Disconnected. Reconnecting in 300ms...");
+                const btn = document.getElementById('conn-btn');
+                btn.innerText = "Reconnecting...";
+
+                clearTimeout(retryTimeout); // 清除舊的計時器
+                retryTimeout = setTimeout(() => {
+                    const btn = document.getElementById('conn-btn');
+                    if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+                        btn.innerText = "Refresh?";
+                        btn.onclick = () => window.location.reload();
+                    }
+                }, 5000);
+
+                setTimeout(connectWS, 300);
+            };
+            ws.onerror = (error) => { 
+                console.error("WebSocket Error:", error); 
             };
         }
         connectWS();
 
-        // 定頻發送機制：每 50 毫秒 (20Hz) 固定發送狀態給 ESP32。
-        // (將發送邏輯從觸控事件中抽離，避免 120Hz 的手機螢幕狂發封包塞爆 ESP32 緩衝區)
         setInterval(() => {
-            if (ws && ws.readyState === WebSocket.OPEN && isConnected) {
-                ws.send(`JOY,${currentV.toFixed(2)},${currentW.toFixed(2)}`);
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                if (isOperating) {
+                    ws.send(`JOY,${currentV.toFixed(2)},${currentW.toFixed(2)}`);
+                } else {
+                    ws.send(`REQ_ODOM`);
+                }
             }
-        }, 50);
+        }, 100);
 
         function toggleConnection() {
-            isConnected = !isConnected;
+            isOperating = !isOperating;
             const btn = document.getElementById('conn-btn');
-            btn.innerText = isConnected ? "ON" : "OFF";
-            btn.classList.toggle('active', isConnected);
-            if (!isConnected) { 
+            btn.innerText = isOperating ? "ON" : "OFF";
+            btn.classList.toggle('active', isOperating);
+            if (!isOperating) { 
                 currentV = 0; currentW = 0; updateUI(); 
                 if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(`JOY,0.00,0.00`); // 斷線時立即強制煞停
+                    ws.send(`JOY,0.00,0.00`);
                 }
             }
         }
 
         function toggleMotionTest() {
-            if (isConnected) {
+            if (isOperating) {
                 alert("Please turn OFF connection to change test mode.");
                 return;
             }
             isMotionTest = !isMotionTest;
             const btn = document.getElementById('test-btn');
-            btn.innerText = isMotionTest ? "Test: ON (40)" : "Test: OFF (80)";
+            btn.innerText = isMotionTest ? "Test: ON (60)" : "Test: OFF (80)";
             btn.classList.toggle('btn-active', isMotionTest);
             
             if (ws && ws.readyState === WebSocket.OPEN) ws.send(`TEST,${isMotionTest ? 1 : 0}`);
@@ -291,10 +322,10 @@ static const char index_html[] PROGMEM = R"raw(
             let pointerId = null;
 
             zone.addEventListener('pointerdown', (e) => {
-                if (!isConnected) return;
+                if (!isOperating) return;
                 pointerId = e.pointerId;
                 zone.setPointerCapture(pointerId);
-                zone.classList.add('active'); // 按下時 Highlight 大圈
+                zone.classList.add('active');
                 handleMove(e);
             });
 
@@ -307,7 +338,6 @@ static const char index_html[] PROGMEM = R"raw(
                 let dx = e.clientX - cx;
                 let dy = e.clientY - cy;
 
-                // 360度自由移動限制
                 const dist = Math.sqrt(dx*dx + dy*dy);
                 if (dist > maxDist) {
                     dx *= maxDist / dist;
@@ -316,11 +346,10 @@ static const char index_html[] PROGMEM = R"raw(
 
                 knob.style.transform = `translate(${dx}px, ${dy}px)`;
 
-                // 數值提取邏輯
                 if (isLeftStick) {
-                    currentV = -(dy / maxDist); // 左手只取 Y 軸
+                    currentV = -(dy / maxDist);
                 } else {
-                    currentW = -(dx / maxDist); // 右手只取 X 軸
+                    currentW = -(dx / maxDist);
                 }
                 updateUI();
             };
@@ -330,7 +359,7 @@ static const char index_html[] PROGMEM = R"raw(
             const reset = (e) => {
                 if (e.pointerId !== pointerId) return;
                 pointerId = null;
-                zone.classList.remove('active'); // 放開時取消 Highlight
+                zone.classList.remove('active');
                 knob.style.transform = `translate(0px, 0px)`;
                 if (isLeftStick) currentV = 0; else currentW = 0;
                 updateUI();
@@ -355,6 +384,10 @@ public:
     volatile bool motion_test_active = false;
     volatile bool request_odom_reset = false;
     volatile unsigned long last_msg_time = 0; 
+    volatile float odom_x = 0.0f;
+    volatile float odom_y = 0.0f;
+    volatile float odom_th = 0.0f;
+    volatile bool pending_odom_reply = false; // 標記是否需要回傳 ODOM
 
     inline JoystickWebUI() : _server(80), _ws("/ws") {}
     
@@ -366,29 +399,57 @@ public:
         esp_wifi_set_ps(WIFI_PS_NONE); 
         WiFi.setSleep(false); 
         
-        _ws.onEvent([this](AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
-            if (type == WS_EVT_DATA) {
-                // 放寬封包檢查：直接將收到的二進位資料安全轉為字串
-                char msg[64];
-                size_t copy_len = (len < 63) ? len : 63;
-                memcpy(msg, data, copy_len);
-                msg[copy_len] = '\0';
+        // [繞過編譯錯誤] 暫時註解掉 setPingInterval。
+        // 標準版的 ESPAsyncWebServer 沒有這個方法，會導致編譯失敗。
+        // _ws.setPingInterval(2000); 
 
-                // 指令解析路由
-                if (strncmp(msg, "JOY,", 4) == 0) {
-                    // 改用 strchr 與 atof 取代 sscanf，速度更快且能避免格式化解析失敗
-                    char* comma = strchr(msg + 4, ',');
-                    if (comma != nullptr) {
-                        *comma = '\0'; // 切割字串
-                        this->target_v = atof(msg + 4);
-                        this->target_w = atof(comma + 1);
-                        this->last_msg_time = millis(); // 更新心跳時間戳記，重置看門狗
+        _ws.onEvent([this](AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
+            switch (type) {
+                case WS_EVT_CONNECT:
+                    // A new client has connected
+                    // Serial.printf("[%lu] [WS] Client #%u connected. Free Heap: %u\n", millis(), client->id(), ESP.getFreeHeap());
+                    break;
+                case WS_EVT_DISCONNECT:
+                    // 簡化斷線提示
+                    // Serial.printf("[%lu] [WS] Client #%u disconnected.\n", millis(), client->id());
+                    break;
+                case WS_EVT_DATA: {
+                    AwsFrameInfo *info = (AwsFrameInfo*)arg;
+                    if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
+                    // 將收到的二進位資料安全轉為字串
+                    char msg[64];
+                    size_t copy_len = (len < 63) ? len : 63;
+                    memcpy(msg, data, copy_len);
+                    msg[copy_len] = '\0';
+                    
+                    // Serial.printf("[%lu] [WS] Client #%u Recv: %s\n", millis(), client->id(), msg);
+
+                    // 指令解析路由
+                    if (strncmp(msg, "JOY,", 4) == 0) {
+                        char* comma = strchr(msg + 4, ',');
+                        if (comma != nullptr) {
+                            *comma = '\0'; // 切割字串
+                            this->target_v = atof(msg + 4);
+                            this->target_w = atof(comma + 1);
+                            this->last_msg_time = millis(); // 更新心跳時間戳記
+                            this->pending_odom_reply = true; // 標記需要回傳
+                        }
+                    } else if (strncmp(msg, "REQ_ODOM", 8) == 0) {
+                        this->last_msg_time = millis(); // 保持心跳，但不立刻回傳
+                        this->pending_odom_reply = true; // 標記需要回傳
+                    } else if (strncmp(msg, "TEST,", 5) == 0) {
+                        this->motion_test_active = (atoi(msg + 5) == 1);
+                    } else if (strncmp(msg, "RST_ODOM", 8) == 0) {
+                        this->request_odom_reset = true;
                     }
-                } else if (strncmp(msg, "TEST,", 5) == 0) {
-                    this->motion_test_active = (atoi(msg + 5) == 1);
-                } else if (strncmp(msg, "RST_ODOM", 8) == 0) {
-                    this->request_odom_reset = true;
+                    }
+                    break;
                 }
+                case WS_EVT_PONG:
+                    break;
+                case WS_EVT_ERROR:
+                    // Serial.printf("[%lu] [WS] Client #%u ERROR\n", millis(), client->id());
+                    break;
             }
         });
 
@@ -400,23 +461,35 @@ public:
     }
     
     inline void cleanup() { 
-        _ws.cleanupClients(); 
+        static unsigned long last_clean_time = 0;
+        if (millis() - last_clean_time > 2000) {
+            last_clean_time = millis();
+            _ws.cleanupClients(); 
+        }
         
-        // 軟體看門狗 (Watchdog)：若超過 1 秒沒收到前端的訊號，判定為失聯並自動煞停
         if (millis() - last_msg_time > 1000) {
             target_v = 0.0f;
             target_w = 0.0f;
         }
+
+        if (this->pending_odom_reply) {
+            this->pending_odom_reply = false;
+            char reply[64];
+            snprintf(reply, sizeof(reply), "ODOM,%.2f,%.2f,%.1f", (float)this->odom_x, (float)this->odom_y, (float)this->odom_th * 180.0f / PI);
+            _ws.textAll(reply);
+        }
     }
 
-    // 將里程計推播給前端網頁
-    inline void broadcastOdom(float x, float y, float theta) {
-        char msg[64];
-        // 內部 theta 是弧度，推播給前端轉為更容易閱讀的「度數 (Degrees)」
-        snprintf(msg, sizeof(msg), "ODOM,%.2f,%.2f,%.1f", x, y, theta * 180.0f / PI);
-        _ws.textAll(msg);
+    inline void updateOdom(float x, float y, float theta) {
+        this->odom_x = x;
+        this->odom_y = y;
+        this->odom_th = theta;
     }
     
+    inline size_t getClientCount() {
+        return _ws.getClients().size();
+    }
+
 private:
     AsyncWebServer _server;
     AsyncWebSocket _ws;

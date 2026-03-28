@@ -132,15 +132,23 @@ public:
             leftPID->setTarget(0);
             rightPID->setTarget(0);
         } else {
-            float v_left = currentV - (currentW * wheelBase / 2.0f);
-            float v_right = currentV + (currentW * wheelBase / 2.0f);
-
-            // 應用來自角速度 PID 的修正
-            v_left -= w_correction;
-            v_right += w_correction;
+            // 將 PID 修正量當作「角速度補償」(rad/s) 直接加到目標角速度上
+            float corrected_w = currentW + w_correction;
+            float v_left = currentV - (corrected_w * wheelBase / 2.0f);
+            float v_right = currentV + (corrected_w * wheelBase / 2.0f);
 
             rpm_left = (v_left * 60.0f) / (PI * wheelDiameter);
             rpm_right = (v_right * 60.0f) / (PI * wheelDiameter);
+
+            // 強制最小有效轉速 (例如 25.0 RPM)
+            // 如果目標轉速大於 0.1 但低於 25，則自動提升至 25 RPM 以確保馬達平順運轉
+            float min_rpm = 25.0f;
+            if (abs(rpm_left) > 0.1f && abs(rpm_left) < min_rpm) {
+                rpm_left = (rpm_left > 0) ? min_rpm : -min_rpm;
+            }
+            if (abs(rpm_right) > 0.1f && abs(rpm_right) < min_rpm) {
+                rpm_right = (rpm_right > 0) ? min_rpm : -min_rpm;
+            }
 
             leftPID->setTarget(rpm_left);
             rightPID->setTarget(rpm_right);

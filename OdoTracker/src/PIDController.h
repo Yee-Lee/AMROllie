@@ -25,7 +25,7 @@ private:
     unsigned long lastTime;
     
     float integralLimit; // 積分限幅 (防止飽和)
-    bool firstRun;       // 旗標：用於初始化 lastError，避免啟動瞬間的 D 項衝擊
+    bool firstRun;
 
 public:
     // 預設計算頻率為 100Hz (10ms 週期)
@@ -48,7 +48,6 @@ public:
         offsetPWM = offset;
     }
 
-    // 完全重置 PID 內部狀態
     void reset() {
         integral = 0;
         lastError = 0;
@@ -57,7 +56,6 @@ public:
         if (motor) motor->drive(0);
     }
 
-    // 核心更新邏輯：必須在 loop() 中不斷呼叫
     void update() {
         unsigned long now = micros();
         if (now - lastTime < intervalUs) return;
@@ -65,33 +63,27 @@ public:
         float dt = (now - lastTime) / 1000000.0f;
         lastTime = now;
 
-        // 確保馬達硬體狀態更新（例如讀取編碼器）
         motor->update();
 
         float currentRPM = motor->getCurrRPM();
         float error = targetRPM - currentRPM;
 
-        // --- 1. 積分項 (I) 與方向管理 ---
+        // --- 1. 積分項 (I) ---
         
-        // 清除時機 A：目標為 0 (停止)
         if (abs(targetRPM) < 0.1f) {
             integral = 0.0f;
         }
-        // 清除時機 B：方向發生翻轉 (正負號變更)
         else if (targetRPM * lastTargetRPM < 0) {
             integral = 0.0f;
-            // 換向時同時重置 lastError，防止 D 項產生巨大的「換向衝擊」
             lastError = error; 
         }
         
         integral += error * dt;
         
-        // 積分限幅 (Clamping) - 防止 Anti-windup
         if (integral > integralLimit) integral = integralLimit;
         else if (integral < -integralLimit) integral = -integralLimit;
 
-        // --- 2. 微分項 (D) 防護 ---
-        // 處理首次執行或目標劇烈變動（> 10 RPM）時的誤差跳變
+        // --- 2. 微分項 (D) ---
         if (firstRun || abs(targetRPM - lastTargetRPM) > 10.0f) {
             lastError = error;
             firstRun = false;
@@ -109,7 +101,7 @@ public:
         float pid_output = p_term + i_term + d_term;
         float final_output = 0;
 
-        // --- 4. 結合前饋控制 (Feed-forward / OffsetPWM) ---
+        // --- 4. 前饋控制 ---
         if (targetRPM > 0.1f) {
             final_output = pid_output + offsetPWM;
         } 
