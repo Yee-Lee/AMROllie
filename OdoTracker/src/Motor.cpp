@@ -29,19 +29,10 @@ void IRAM_ATTR Motor::isrWrapper(void* arg) {
     bool stateA = digitalRead(instance->_pinEncA);
     bool stateB = digitalRead(instance->_pinEncB);
 
-    // 判斷旋轉方向
-    bool forward = (stateA == stateB);
-
-    // 如果硬體設定為反向，則將邏輯方向取反
-    if (instance->_isReversed) {
-        forward = !forward;
-    }
-
-    if (forward) {
-        instance->_pos++;
-    } else {
-        instance->_pos--;
-    }
+    // 判斷旋轉方向，並結合 _isReversed 修正物理安裝方向 (使用 XOR 邏輯)
+    bool forward = (stateA == stateB) ^ instance->_isReversed;
+    
+    instance->_pos += forward ? 1 : -1;
 }
 
 void Motor::init() {

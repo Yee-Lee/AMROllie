@@ -83,11 +83,8 @@ void loop() {
     rightPID.update();
 
     // 4. IMU 讀取與角速度 PID 控制
-    bool has_new_imu_data = false;
-    if (mpuDataReady) {
-        mpuDataReady = false;
-        has_new_imu_data = true;
-    }
+    bool has_new_imu_data = mpuDataReady;
+    mpuDataReady = false;
     
     // 5. 靜止狀態防護：如果搖桿歸零且車體已停下，清除 PID 積分避免 I-term 累積 (Windup)
     // 改為同時檢查目標指令為 0，且兩輪的實際轉速也降至極低 (< 2.0 RPM) 才算真正靜止
@@ -96,9 +93,8 @@ void loop() {
         
         angular_w_controller.reset();
         w_correction = 0.0f;
-        // 若您的 PIDController 支援 reset，請在此處將其解開以清除馬達積分
-        // leftPID.reset();  
-        // rightPID.reset();
+        leftPID.reset();  
+        rightPID.reset();
     } else {
         // 內部會自動判斷是否有新數據，若有才進行物理讀取與 PID 計算
         w_correction = angular_w_controller.update(tele.current_w, has_new_imu_data);

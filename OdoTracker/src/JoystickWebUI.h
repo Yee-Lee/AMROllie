@@ -306,11 +306,6 @@ public:
                         this->last_msg_time = millis(); // 更新心跳時間戳記
                     }
                 }
-            } else if (type == WS_EVT_DISCONNECT) {
-                // 移除瞬間清零，交由 1000ms 的 cleanup() Watchdog 負責判定真實失聯
-                // 這能容忍 WiFi 在 1 秒內的微小瞬斷重連，避免車體頻繁頓挫
-                // this->target_v = 0.0f; 
-                // this->target_w = 0.0f;
             }
         });
 
