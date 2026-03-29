@@ -490,6 +490,10 @@ public:
         return _ws.getClients().size();
     }
 
+    inline AsyncWebServer& getServer() {
+        return _server;
+    }
+
 private:
     AsyncWebServer _server;
     AsyncWebSocket _ws;

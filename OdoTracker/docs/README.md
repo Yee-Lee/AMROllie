@@ -1,95 +1,78 @@
-# OdoTracker (AMR Ollie)
+# OdoTracker: ESP32 差速驅動機器人控制器
 
-OdoTracker 是一個基於 ESP32 的雙輪差速自主移動機器人 (AMR) 底盤控制系統。本專案致力於實現高精度的閉迴路運動控制，結合了底層的輪速 PID 控制與高層的 IMU 航向角速度 PID 修正，並提供一個具備安全機制的低延遲 WebSocket 網頁搖桿介面。
+本專案是一個基於 ESP32 開發的二輪差速驅動機器人韌體。它整合了精密的運動控制系統、即時里程計追蹤，以及一個用於遠端遙控和數據視覺化的網頁介面。
 
-## 🎯 專案目標
+## 核心功能
 
-1. **精準的底盤運動學控制**：透過正逆運動學解算，將期望的線速度 ($V$) 與角速度 ($W$) 轉換為左右輪的目標轉速 (RPM)。
-2. **雙層閉迴路 PID 架構 (Dual-Loop PID)**：
-   - **內迴圈 (Inner Loop)**：讀取光電/霍爾編碼器，控制實體馬達的 RPM 穩定度。
-   - **外迴圈 (Outer Loop)**：讀取 MPU6050 陀螺儀 (Z軸角速度)，自動修正因地面摩擦力不均或馬達硬體差異造成的偏航，確保直線行駛與精準轉向。
-3. **平滑與安全性 (Safety & Smoothness)**：
-   - 實作緩坡限制 (Slew Rate Limiter) 防止加減速過猛導致翻車或馬達過載。
-   - 具備通訊看門狗 (Watchdog) 機制，當控制端斷線時車體能自動安全煞停。
-4. **高度模組化 (Modular Design)**：將硬體驅動、PID 演算法、運動學解算與通訊介面徹底解耦，便於未來擴充 (例如加入 ROS 2 micro-ROS 節點)。
+-   **網頁遠端遙控**: 提供一個適合行動裝置操作的網頁介面，使用者可透過虛擬搖桿，經由 WebSocket 控制機器人的線速度與角速度。
+-   **即時里程計 (Odometry)**: 融合輪式編碼器與 IMU 的數據，即時計算機器人的 `(X, Y, θ)` 姿態，並將當前位置同步顯示於網頁介面上。
+-   **進階運動控制**:
+    -   **逆向運動學解算**: 將期望的線速度和角速度，轉換為左右兩輪的目標轉速(RPM)。
+    -   **馬達 PID 閉環控制**: 為每個馬達配備獨立的 PID 控制器，確保馬達轉速能精準追蹤目標。
+    -   **角速度 PID 閉環控制**: 使用陀螺儀 (MPU-6050) 來修正角速度的偏差，實現精確的轉向。
+    -   **航向鎖定 (Heading Lock)**: 當沒有轉向指令時，角速度控制器會主動維持當前車身方向，實現穩定直線行駛。
+-   **即時數據圖表**: 內建一個數據監控網頁 (`/stats`)，可繪製關鍵的即時數據（目標速度 vs. 實際速度、里程計、馬達轉速、PID輸出等），是參數調校與偵錯的絕佳工具。
+-   **彈性的參數配置**: 所有硬體腳位、機器人尺寸、PID 常數等都集中在 `config.h` 中，方便使用者根據自己的硬體進行設定。
+-   **PlatformIO 專案管理**: 使用 PlatformIO 作為開發環境，並為主要應用程式和附屬的診斷工具設定了不同的編譯環境。
 
----
+## 硬體需求
 
-## 🛠️ 硬體架構
+-   **主控單元**: ESP32 開發板 (例如：ESP32-DevKitC)
+-   **機器人車體**: 一個二輪差速驅動的機器人底盤。
+-   **馬達**: 兩個帶有正交編碼器的直流馬達。
+-   **馬達驅動板**: 一個雙 H 橋馬達驅動器 (例如：TB6612FNG, L298N)。
+-   **慣性測量單元 (IMU)**: MPU-6050 加速規/陀螺儀模組。
 
-- **微控制器**：ESP32 Development Board
-- **慣性感測器 (IMU)**：MPU-6050 (或相容的 MPU-6500，系統已內建硬體 Bypass 辨識機制)
-- **致動器**：帶有正交編碼器 (Quadrature Encoder) 的直流減速馬達 x2
-- **馬達驅動器**：支援 IN1, IN2, PWM 控制邏輯的驅動板 (如 L298N, TB6612 或 MOS 驅動)
+## 軟體與函式庫
 
-### 腳位配置 (Pinout)
-| 元件 / 功能 | 左輪 (Left Motor) | 右輪 (Right Motor) | IMU (MPU6050) |
-| :--- | :--- | :--- | :--- |
-| **IN1 (前進)** | GPIO 12 | GPIO 27 | - |
-| **IN2 (後退)** | GPIO 14 | GPIO 26 | - |
-| **PWM (調速)** | GPIO 13 | GPIO 25 | - |
-| **Encoder A**| GPIO 18 | GPIO 19 | - |
-| **Encoder B**| GPIO 34 | GPIO 35 | - |
-| **SDA (I2C)** | - | - | GPIO 21 (預設) |
-| **SCL (I2C)** | - | - | GPIO 22 (預設) |
-| **INT (中斷)** | - | - | GPIO 4 |
+本專案使用 PlatformIO IDE 進行開發。所有必要的函式庫都已在 `platformio.ini` 中定義，PlatformIO 會自動進行管理：
 
-> **注意**：IMU 的中斷腳位設定為 GPIO 4，刻意避開了 ESP32 的 Strapping Pins (如 GPIO 15)，以防止開機異常。
+-   `ESPAsyncWebServer` & `AsyncTCP`: 用於驅動網頁伺服器。
+-   `ArduinoJson`: 用於 WebSocket 的數據序列化。
+-   `Adafruit MPU6050`: 用於與 IMU 模組通訊。
+-   `Adafruit Unified Sensor` & `Adafruit BusIO`: MPU6050 函式庫的依賴項。
 
----
+## 如何編譯與執行
 
-## 🧠 軟體架構與實作細節
+### 1. 安裝開發環境
+請先在 Visual Studio Code 中安裝 [PlatformIO IDE 擴充套件](https://platformio.org/install/ide?install=vscode)。
 
-### 1. 馬達與編碼器控制 (`Motor.cpp` / `PIDController.h`)
-- 使用 ESP32 的 **LEDC 硬體計時器**產生平順的 5kHz PWM 訊號。
-- 編碼器採用 **雙沿觸發 (CHANGE)** 中斷，將解析度提升兩倍。內部具備一階低通濾波器來平滑 RPM 讀數。
-- 底層 `PIDController` 實作了 **積分限幅 (Anti-windup)**、過零點重置與**前饋控制 (Feed-forward offsetPWM)**，用以克服馬達的靜摩擦力死區 (Deadband)。
+### 2. 複製專案
+將本專案複製到您的本機電腦。
 
-### 2. 運動控制器 (`MotionController.h`)
-- 接收來自控制端的目標 $V$ (m/s) 與 $W$ (rad/s)。
-- 執行**加速度限制 (Apply Ramp)**，根據 `dt` 計算每一幀允許的最大速度變化，實現平滑起步與煞車。
-- 利用差速運動學公式計算左右輪目標 RPM：
-  $$V_{left} = V - (W \times \frac{WheelBase}{2}) - W_{correction}$$
-  $$V_{right} = V + (W \times \frac{WheelBase}{2}) + W_{correction}$$
+### 3. 建立與設定 `config.h`
+-   複製 `src/config.h.default` 檔案，並將其重新命名為 `src/config.h`。
+-   打開 `src/config.h` 並根據您的硬體配置進行修改：
+    -   設定您的 WiFi 名稱 (`WIFI_SSID`) 和密碼 (`WIFI_PASSWORD`)。
+    -   定義您的馬達驅動板、編碼器以及 MPU-6050 所連接的正確 GPIO 腳位。
+    -   測量並設定您的機器人實體尺寸 (`WHEEL_DIAMETER`, `WHEEL_BASE`)。
+    -   (可選) 調整 PID 與其他控制參數。
 
-### 3. IMU 與角速度外迴圈 (`AngularVelocityController.h`)
-- 採用 **硬體中斷驅動 (Data Ready Interrupt)**，強制感測器以精準的 50Hz (Sample Rate Divisor = 19) 觸發 ESP32 讀取資料，確保 PID 的微分項 ($dt$) 極度穩定。
-- **靜態零點校正 (Static Calibration)**：系統開機的前 1 秒會收集 50 筆靜止數據計算陀螺儀的系統誤差 (Zero-rate Bias)，並在執行期間扣除，確保角速度在靜止時完美歸零。
-- 若檢測到市面常見的 MPU-6500 偽裝晶片 (WHO_AM_I = 0x70)，會自動發送硬體喚醒指令繞過函式庫驗證，提升硬體相容性。
+### 4. 編譯與上傳主程式 (`odoTracker`)
+-   使用 USB 將您的 ESP32 開發板連接到電腦。
+-   在 VS Code 的 PlatformIO 視窗中，確認當前環境為 `odoTracker` (通常是預設)。
+-   點擊 **Build** (編譯) 與 **Upload** (上傳)。
 
-### 4. 網頁搖桿介面 (`JoystickWebUI.h`)
-- 基於 `ESPAsyncWebServer` 實作。
-- 前端網頁包含虛擬雙搖桿與即時遙測儀表板。
-- 具備 **Keep-Alive (心跳包) 機制**：前端每 200ms 發送一次狀態。
-- 具備 **Watchdog (看門狗) 機制**：後端若超過 1000ms 未收到訊號 (例如手機鎖屏或斷網)，將強制把目標速度歸零並煞停。變數採用 `volatile` 宣告以確保多核心非同步處理下的記憶體一致性。
+### 5. 連線與操作
+-   上傳完成後，打開 PlatformIO 的 **Serial Monitor** (序列埠監控視窗)。機器人成功連上 WiFi 後，會在此處顯示其取得的 IP 位址。
+-   在同一區域網路下的任何裝置（電腦、手機）的瀏覽器中，輸入該 IP 位址。
+-   您會看到虛擬搖桿介面，此時即可開始遙控。
+-   若要查看即時數據圖表，請訪問 `http://<YOUR_ROBOT_IP>/stats`。
 
----
+## 如何使用附屬工具 (子專案)
 
-## 💻 環境設定與開發指南
+本專案在 `platformio.ini` 中預設了兩個用於硬體偵錯的獨立編譯環境。您可以在 VS Code 底部的狀態列，或 PlatformIO 的專案任務視窗中切換環境。
 
-### 1. 開發環境
-- 安裝 Visual Studio Code。
-- 安裝 **PlatformIO IDE** 擴充套件。
+### I2C 掃描器 (`scanner`)
+-   **用途**: 當您不確定 MPU-6050 是否被主板正確偵測時，可以使用此工具。它會掃描 I2C 匯流排上所有已連接的設備位址。
+-   **使用方法**:
+    1.  在 PlatformIO 環境中切換到 `scanner`。
+    2.  編譯並上傳。
+    3.  打開 Serial Monitor，您應該會看到類似 `I2C device found at address 0x68 !` 的訊息，這表示 MPU-6050 已被正確識別。
 
-### 2. 依賴函式庫 (於 `platformio.ini` 中設定)
-- `mathieucarbou/ESPAsyncWebServer` (非同步網頁伺服器)
-- `adafruit/Adafruit MPU6050` & `adafruit/Adafruit Unified Sensor` (IMU 讀取)
-- `bblanchon/ArduinoJson` (JSON 處理與通訊擴充)
-
-### 3. 初始設定
-1. 在 `src/` 目錄下建立 `config.h` 檔案：
-   ```cpp
-   #ifndef CONFIG_H
-   #define CONFIG_H
-   const char* WIFI_SSID = "YOUR_WIFI_SSID";
-   const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
-   #endif
-   ```
-2. 透過 USB 連接 ESP32，在 PlatformIO 點擊 **Upload and Monitor**。
-
-### 4. 系統啟動流程與測試
-1. **保持車體靜止**：通電後的前 2 秒鐘，系統正在進行 MPU6050 的靜態零點校正，請勿晃動車體。
-2. **觀察 Serial Monitor**：等待印出 `Calibration done!` 以及 `WiFi Connected: 192.168.x.x`。
-3. **連線操控**：在手機或電腦瀏覽器輸入 ESP32 的 IP 地址，點擊網頁右上角的 **OFF / ON** 按鈕即可開始推動搖桿操控。
-
-
+### MPU6050 測試器 (`mpu6050_test`)
+-   **用途**: 用於單獨測試 MPU-6050 是否能正常運作並回傳數據。
+-   **使用方法**:
+    1.  在 PlatformIO 環境中切換到 `mpu6050_test`。
+    2.  編譯並上傳。
+    3.  打開 Serial Monitor，您會看到程式持續輸出從 MPU-6050 讀取的陀螺儀與加速計原始數據。

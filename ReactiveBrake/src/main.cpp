@@ -8,6 +8,9 @@
 #include "AngularVelocityController.h"
 #include "Odometry.h"
 #include "config.h"
+#include "DataLogger.h"
+#include "statWebUI.h"
+#include <freertos/FreeRTOS.h> // For portMUX_TYPE
 
 // --- IMU 與角速度 PID ---
 #define MPU_INT_PIN 4 
@@ -16,7 +19,11 @@ void IRAM_ATTR mpuISR() {
     mpuDataReady = true;
 }
 
-AngularVelocityController angular_w_controller(0.6, 0.0, 0.02, 50); 
+// 調整 PID 參數以獲得更平滑的航向鎖定 (Heading Lock)
+// Kp: 降低比例增益，減少對瞬間誤差的過度反應。
+// Ki: 稍微降低積分增益，因為 P 和 D 的協同作用會更有效。
+// Kd: 顯著提高微分增益，以抑制震盪 (蛇行)。
+AngularVelocityController angular_w_controller(0.4, 0.9, 0.2, 50); 
 float w_correction = 0.0f; 
 
 // --- 執行機構與 PID 定義 ---
@@ -39,6 +46,9 @@ bool is_motion_test_mode = false;
 
 unsigned long lastLogTime = 0;
 unsigned long lastStatusTime = 0;
+unsigned long lastDataLogTime = 0;
+DataLogger dataLogger;
+static portMUX_TYPE dataLoggerMux = portMUX_INITIALIZER_UNLOCKED;
 
 void setup() {
     Serial.begin(115200);
@@ -61,6 +71,9 @@ void setup() {
 
     // WiFi 連線邏輯
     webUI.begin(WIFI_SSID, WIFI_PASSWORD);
+
+    // 註冊數據監控頁面與 API 路由 (封裝在 statWebUI.h 中)
+    setupStatWebUI(&webUI.getServer(), &dataLogger, &dataLoggerMux);
 
     motionController.begin();
     odom.begin();
@@ -119,9 +132,23 @@ void loop() {
     odom.update(leftMotor.getCurrRPM(), rightMotor.getCurrRPM(), angular_w_controller.getActualW());
     webUI.updateOdom(odom.getX(), odom.getY(), odom.getTheta());
 
+
+    // 6.5 定期紀錄狀態數據 (每 100ms 紀錄一筆，可涵蓋最近 51.2 秒的軌跡狀態)
+    if (millis() - lastDataLogTime > 100) {
+        portENTER_CRITICAL(&dataLoggerMux);
+        dataLogger.logData(
+            webUI.target_v, webUI.target_w, tele.current_v, tele.current_w,
+            odom.getX(), odom.getY(), odom.getTheta(),
+            leftMotor.getCurrRPM(), rightMotor.getCurrRPM(), angular_w_controller.getActualW(), w_correction
+        );
+        portEXIT_CRITICAL(&dataLoggerMux);
+        lastDataLogTime = millis();
+    }
+
     // 7. 遙測數據輸出 (50ms)
     if (millis() - lastLogTime > 50) {
-        Serial.printf(">Joy(V:%5.2f W:%5.2f) Pose(X:%5.2f Y:%5.2f Th:%5.2f) | L_Act:%5.1f R_Act:%5.1f | Gyro_W:%5.2f Corr:%5.2f\n", 
+        Serial.printf("[%6lu] >Joy(V:%5.2f W:%5.2f) Pose(X:%5.2f Y:%5.2f Th:%5.2f) | L_Act:%5.1f R_Act:%5.1f | Gyro_W:%5.2f Corr:%5.2f\n", 
+                      millis(),
                       webUI.target_v, webUI.target_w,
                       odom.getX(), odom.getY(), odom.getTheta(), 
                       leftMotor.getCurrRPM(), rightMotor.getCurrRPM(), 
@@ -129,9 +156,5 @@ void loop() {
         lastLogTime = millis();
     }
 
-    // 8. 系統狀態監控 (2s)
-    if (millis() - lastStatusTime > 2000) {
-        // Serial.printf("[%lu] [System Status] Free Heap: %u bytes | Active WS Clients: %u\n", millis(), ESP.getFreeHeap(), webUI.getClientCount());
-        lastStatusTime = millis();
-    }
+
 }

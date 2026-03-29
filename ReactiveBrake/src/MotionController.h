@@ -140,18 +140,9 @@ public:
             rpm_left = (v_left * 60.0f) / (PI * wheelDiameter);
             rpm_right = (v_right * 60.0f) / (PI * wheelDiameter);
 
-            // 強制最小有效轉速 (例如 25.0 RPM)
-            // 如果目標轉速大於 0.1 但低於 25，則自動提升至 25 RPM 以確保馬達平順運轉
-            float min_rpm = 25.0f;
-            if (abs(rpm_left) > 0.1f && abs(rpm_left) < min_rpm) {
-                rpm_left = (rpm_left > 0) ? min_rpm : -min_rpm;
-            }
-            if (abs(rpm_right) > 0.1f && abs(rpm_right) < min_rpm) {
-                rpm_right = (rpm_right > 0) ? min_rpm : -min_rpm;
-            }
 
             leftPID->setTarget(rpm_left);
-            rightPID->setTarget(rpm_right);
+            rightPID->setTarget(rpm_right);;
         }
 
         // 5. 更新遙測數據
