@@ -21,6 +21,7 @@ private:
     // PID 內部狀態
     float integral;
     float last_error;
+    float target_w_last;
     
     // 時間管理
     unsigned long last_time;
@@ -45,7 +46,7 @@ public:
      */
     AngularVelocityController(float p, float i, float d, int hz = 50) 
         : kp(p), ki(i), kd(d), integral(0), last_error(0), first_run(true),
-          gyroZ_offset(0.0f), actual_w(0.0f), last_output(0.0f) {
+          gyroZ_offset(0.0f), actual_w(0.0f), last_output(0.0f), target_w_last(0.0f) {
         
         if (hz > 0) {
             interval_s = 1.0f / hz;
@@ -123,6 +124,7 @@ public:
         last_error = 0;
         first_run = true;
         last_output = 0.0f;
+        target_w_last = 0.0f;
     }
 
     /**
@@ -173,11 +175,21 @@ public:
         // 計算誤差
         float error = target_w - actual_w;
 
-        // --- 積分項 ---
-        integral += error * dt;
-        // 簡單的積分限幅 (可選，但建議)
-        // 此處的 100 是一個需要調整的經驗值
-        integral = constrain(integral, -100.0f, 100.0f);
+        // --- 積分項 (作為直線航向鎖定 Heading Lock) ---
+        // 當目標角速度為 0 時 (直線行駛)，角速度誤差的積分即為「航向角度誤差」
+        if (abs(target_w) < 0.001f) {
+            if (abs(target_w_last) >= 0.001f) {
+                // 剛結束轉向，重置積分以鎖定當前的新航向
+                integral = 0.0f;
+            }
+            integral += error * dt;
+            // 限制最大航向累積誤差 (0.5 弧度約為 28 度)，防止被外力硬轉後過度修正打滑
+            integral = constrain(integral, -0.5f, 0.5f);
+        } else {
+            // 手動轉向時，不累積積分，避免搖桿放開時產生強烈的回彈 (Windup)
+            integral = 0.0f;
+        }
+        target_w_last = target_w;
 
         // --- 微分項 ---
         // 首次執行時，避免 D 項衝擊
