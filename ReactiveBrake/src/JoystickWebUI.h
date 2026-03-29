@@ -155,6 +155,11 @@ static const char index_html[] PROGMEM = R"raw(
         }
         .btn-active { background: #ff8800 !important; color: var(--bg) !important; border-color: #ff8800 !important; }
 
+        .sonar-indicator { width: 14px; height: 14px; border-radius: 50%; transition: background-color 0.2s ease, box-shadow 0.2s ease; }
+        .sonar-ok { background-color: #28a745; box-shadow: 0 0 8px #28a74580; }
+        .sonar-warn { background-color: #ffc107; box-shadow: 0 0 8px #ffc10780; }
+        .sonar-danger { background-color: #dc3545; box-shadow: 0 0 8px #dc354580; }
+
         #portrait-warning {
             display: none;
             position: absolute;
@@ -190,6 +195,8 @@ static const char index_html[] PROGMEM = R"raw(
             <div class="data-card"><div class="label">Angular W</div><div id="val-w" class="value">0.00</div></div>
             <div class="data-card"><div class="label">L-Pwr</div><div id="pwr-l" class="value">0%</div></div>
             <div class="data-card"><div class="label">R-Pwr</div><div id="pwr-r" class="value">0%</div></div>
+            <div class="data-card" style="flex-direction: row; justify-content: space-around; align-items: center;"><div class="label">L-Sonar</div><div id="sonar-l" class="sonar-indicator"></div></div>
+            <div class="data-card" style="flex-direction: row; justify-content: space-around; align-items: center;"><div class="label">R-Sonar</div><div id="sonar-r" class="sonar-indicator"></div></div>
             <div class="data-card"><div class="label">X (m)</div><div id="val-x" class="value">0.00</div></div>
             <div class="data-card"><div class="label">Y (m)</div><div id="val-y" class="value">0.00</div></div>
             <div class="data-card" style="grid-column: 1 / -1; flex-direction: row; justify-content: space-around;"><div class="label">Theta(deg)</div><div id="val-th" class="value" style="font-size:18px;">0.0</div></div>
@@ -234,15 +241,17 @@ static const char index_html[] PROGMEM = R"raw(
                 }, 200);
             };
             ws.onmessage = (event) => {
-                if (event.data.startsWith("ODOM,")) {
-                    let parts = event.data.split(",");
-                    if (parts.length === 4) {
-                        document.getElementById('val-x').innerText = parseFloat(parts[1]).toFixed(2);
-                        document.getElementById('val-y').innerText = parseFloat(parts[2]).toFixed(2);
-                        document.getElementById('val-th').innerText = parseFloat(parts[3]).toFixed(1);
-                    }
+                const parts = event.data.split(",");
+                if (parts[0] === "ODOM" && parts.length === 4) {
+                    document.getElementById('val-x').innerText = parseFloat(parts[1]).toFixed(2);
+                    document.getElementById('val-y').innerText = parseFloat(parts[2]).toFixed(2);
+                    document.getElementById('val-th').innerText = parseFloat(parts[3]).toFixed(1);
+                } else if (parts[0] === "SONAR" && parts.length === 3) {
+                    updateSonarStatus(parseFloat(parts[1]), 'sonar-l');
+                    updateSonarStatus(parseFloat(parts[2]), 'sonar-r');
                 }
             };
+
             ws.onclose = () => {
                 console.log("WebSocket Disconnected. Reconnecting in 300ms...");
                 const btn = document.getElementById('conn-btn');
@@ -264,6 +273,20 @@ static const char index_html[] PROGMEM = R"raw(
             };
         }
         connectWS();
+
+        function updateSonarStatus(dist, elementId) {
+            const el = document.getElementById(elementId);
+            if (!el) return;
+            let newClass = 'sonar-indicator ';
+            if (dist < 15) {
+                newClass += 'sonar-danger';
+            } else if (dist < 50) {
+                newClass += 'sonar-warn';
+            } else {
+                newClass += 'sonar-ok';
+            }
+            el.className = newClass;
+        }
 
         setInterval(() => {
             if (ws && ws.readyState === WebSocket.OPEN) {
@@ -484,6 +507,10 @@ public:
         this->odom_x = x;
         this->odom_y = y;
         this->odom_th = theta;
+    }
+    
+    inline void broadcastText(const char* message) {
+        _ws.textAll(message);
     }
     
     inline size_t getClientCount() {
