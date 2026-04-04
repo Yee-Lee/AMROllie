@@ -22,8 +22,8 @@ private:
     PIDController* _rightPID;
 
     // 演算法參數
-    const float DANGER_ZONE = 15.0f;  // cm
-    const float WARNING_ZONE = 50.0f; // cm
+    const float DANGER_ZONE = 18.0f;  // cm
+    const float WARNING_ZONE = 35.0f; // cm
 
     // 感測器更新計時
     unsigned long _last_trigger_time = 0;

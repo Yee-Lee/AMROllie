@@ -10,6 +10,7 @@
 #include "config.h"
 #include "DataLogger.h"
 #include "statWebUI.h"
+#include "ReactiveBrake.h"
 #include <freertos/FreeRTOS.h> // For portMUX_TYPE
 
 // --- IMU 與角速度 PID ---
@@ -36,6 +37,9 @@ PIDController rightPID(&rightMotor, 1.7, 3.8, 0.005, 50.0, 100);
 // 控制組件實體
 JoystickWebUI webUI;
 MotionController motionController(&leftPID, &rightPID, 0.135f, 0.065f); // 輪距 13.5cm, 輪徑 6.5cm
+
+// 超音波與反應式煞車 (先傳入 PID 但暫不使用其 filter 煞車功能，僅讀取距離)
+ReactiveBrake reactiveBrake(&leftPID, &rightPID);
 
 // 里程計融合實體 (輪徑 6.5cm, 輪距 13.5cm)
 Odometry odom(0.065f, 0.135f);
@@ -64,6 +68,9 @@ void setup() {
     // PID 基礎偏移設定
     leftPID.setOffset(90);
     rightPID.setOffset(90);
+
+    // 初始化超音波感測器
+    reactiveBrake.init();
 
     float initial_max_v = (max_rpm_limit * PI * 0.065f) / 60.0f;
     motionController.setLimits(initial_max_v, 3.0f, 0.5f, 2.0f);
@@ -103,14 +110,25 @@ void loop() {
         Serial.printf("    New max linear velocity: %.2f m/s\n", new_max_v);
     }
 
-    // 2. 運動學解算與更新
-    MotionTelemetry tele = motionController.update(webUI.target_v, webUI.target_w, w_correction);
+    // 2. 超音波更新與 WebUI 推送
+    reactiveBrake.updateSensors();
+    webUI.updateSonar(reactiveBrake.getLeftDistance(), reactiveBrake.getRightDistance());
 
-    // 3. 馬達 PID 更新
+    // 3. 反應式煞車邏輯 (Reactive Brake Filter)
+    float safe_v = webUI.target_v;
+    float safe_w = webUI.target_w;
+    
+    // 只有「前進」時才觸發前方超音波防撞 (避免倒車也被煞停)
+    if (webUI.target_v > 0) {
+        reactiveBrake.filter(webUI.target_v, webUI.target_w, safe_v, safe_w);
+    }
+
+    // 4. 運動學解算與馬達 PID 更新 (使用過濾後的安全速度 safe_v, safe_w)
+    MotionTelemetry tele = motionController.update(safe_v, safe_w, w_correction);
     leftPID.update();
     rightPID.update();
 
-    // 4. IMU 角速度 PID 控制
+    // 5. IMU 角速度 PID 控制
     bool has_new_imu_data = mpuDataReady;
     mpuDataReady = false;
     
@@ -125,7 +143,13 @@ void loop() {
         leftPID.reset();  
         rightPID.reset();
     } else {
-        w_correction = constrain(raw_w_correction, -1.5f, 1.5f);
+        // 如果在測試模式 (架空測試)，強制關閉 IMU 補償，避免因為車體沒轉而導致 PID 積分暴衝
+        if (is_motion_test_mode) {
+            w_correction = 0.0f;
+        } else {
+            // 平時下修最大修正極限，避免瞬間修正過猛導致車身抖動或暴衝
+            w_correction = constrain(raw_w_correction, -0.8f, 0.8f);
+        }
     }
 
     // 6. 更新全局里程計

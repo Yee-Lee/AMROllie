@@ -5,6 +5,7 @@
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
 #include <esp_wifi.h>
+#include <ESPmDNS.h>
 
 static const char index_html[] PROGMEM = R"raw(
 <!DOCTYPE HTML>
@@ -120,6 +121,9 @@ static const char index_html[] PROGMEM = R"raw(
             background: rgba(0,0,0,0.4);
             padding: 4px;
             border-radius: 4px;
+            border: 2px solid transparent;
+            box-sizing: border-box;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
         }
 
         .label { font-size: 9px; color: var(--accent); margin-bottom: 2px; text-transform: uppercase;}
@@ -155,10 +159,9 @@ static const char index_html[] PROGMEM = R"raw(
         }
         .btn-active { background: #ff8800 !important; color: var(--bg) !important; border-color: #ff8800 !important; }
 
-        .sonar-indicator { width: 14px; height: 14px; border-radius: 50%; transition: background-color 0.2s ease, box-shadow 0.2s ease; }
-        .sonar-ok { background-color: #28a745; box-shadow: 0 0 8px #28a74580; }
-        .sonar-warn { background-color: #ffc107; box-shadow: 0 0 8px #ffc10780; }
-        .sonar-danger { background-color: #dc3545; box-shadow: 0 0 8px #dc354580; }
+        .sonar-ok { border-color: transparent; }
+        .sonar-warn { border-color: #28a745; box-shadow: 0 0 8px #28a74580; }
+        .sonar-danger { border-color: #ffc107; box-shadow: 0 0 8px #ffc10780; }
 
         #portrait-warning {
             display: none;
@@ -195,11 +198,13 @@ static const char index_html[] PROGMEM = R"raw(
             <div class="data-card"><div class="label">Angular W</div><div id="val-w" class="value">0.00</div></div>
             <div class="data-card"><div class="label">L-Pwr</div><div id="pwr-l" class="value">0%</div></div>
             <div class="data-card"><div class="label">R-Pwr</div><div id="pwr-r" class="value">0%</div></div>
-            <div class="data-card" style="flex-direction: row; justify-content: space-around; align-items: center;"><div class="label">L-Sonar</div><div id="sonar-l" class="sonar-indicator"></div></div>
-            <div class="data-card" style="flex-direction: row; justify-content: space-around; align-items: center;"><div class="label">R-Sonar</div><div id="sonar-r" class="sonar-indicator"></div></div>
-            <div class="data-card"><div class="label">X (m)</div><div id="val-x" class="value">0.00</div></div>
-            <div class="data-card"><div class="label">Y (m)</div><div id="val-y" class="value">0.00</div></div>
-            <div class="data-card" style="grid-column: 1 / -1; flex-direction: row; justify-content: space-around;"><div class="label">Theta(deg)</div><div id="val-th" class="value" style="font-size:18px;">0.0</div></div>
+            <div id="card-sonar-l" class="data-card"><div class="label">L-Sonar</div><div id="sonar-l" class="value">--</div></div>
+            <div id="card-sonar-r" class="data-card"><div class="label">R-Sonar</div><div id="sonar-r" class="value">--</div></div>
+            <div class="data-card" style="grid-column: 1 / -1; flex-direction: row; justify-content: space-around;">
+                <div style="display: flex; flex-direction: column; align-items: center;"><div class="label">X (m)</div><div id="val-x" class="value">0.00</div></div>
+                <div style="display: flex; flex-direction: column; align-items: center;"><div class="label">Y (m)</div><div id="val-y" class="value">0.00</div></div>
+                <div style="display: flex; flex-direction: column; align-items: center;"><div class="label">Theta(deg)</div><div id="val-th" class="value">0.0</div></div>
+            </div>
             <div class="btn-group">
                 <button id="test-btn" onclick="toggleMotionTest()">Test: OFF</button>
                 <button id="rst-btn" onclick="resetOdom()">Reset Pose</button>
@@ -247,8 +252,8 @@ static const char index_html[] PROGMEM = R"raw(
                     document.getElementById('val-y').innerText = parseFloat(parts[2]).toFixed(2);
                     document.getElementById('val-th').innerText = parseFloat(parts[3]).toFixed(1);
                 } else if (parts[0] === "SONAR" && parts.length === 3) {
-                    updateSonarStatus(parseFloat(parts[1]), 'sonar-l');
-                    updateSonarStatus(parseFloat(parts[2]), 'sonar-r');
+                    updateSonarStatus(parseFloat(parts[1]), 'card-sonar-l', 'sonar-l');
+                    updateSonarStatus(parseFloat(parts[2]), 'card-sonar-r', 'sonar-r');
                 }
             };
 
@@ -274,18 +279,22 @@ static const char index_html[] PROGMEM = R"raw(
         }
         connectWS();
 
-        function updateSonarStatus(dist, elementId) {
-            const el = document.getElementById(elementId);
-            if (!el) return;
-            let newClass = 'sonar-indicator ';
-            if (dist < 15) {
+        function updateSonarStatus(dist, cardId, valId) {
+            const card = document.getElementById(cardId);
+            const valEl = document.getElementById(valId);
+            if (!card || !valEl) return;
+            
+            valEl.innerText = dist > 400 ? "---" : dist.toFixed(1);
+            
+            let newClass = 'data-card ';
+            if (dist < 18) {
                 newClass += 'sonar-danger';
-            } else if (dist < 50) {
+            } else if (dist < 35) {
                 newClass += 'sonar-warn';
             } else {
                 newClass += 'sonar-ok';
             }
-            el.className = newClass;
+            card.className = newClass;
         }
 
         setInterval(() => {
@@ -411,6 +420,8 @@ public:
     volatile float odom_y = 0.0f;
     volatile float odom_th = 0.0f;
     volatile bool pending_odom_reply = false; // 標記是否需要回傳 ODOM
+    volatile float sonar_l = 999.0f;
+    volatile float sonar_r = 999.0f;
 
     inline JoystickWebUI() : _server(80), _ws("/ws") {}
     
@@ -421,6 +432,13 @@ public:
 
         esp_wifi_set_ps(WIFI_PS_NONE); 
         WiFi.setSleep(false); 
+        
+        // 啟動 mDNS，設定 hostname 為 esp32-ollie
+        if (MDNS.begin("esp32-ollie")) {
+            Serial.println("mDNS responder started. Access via http://esp32-ollie.local");
+        } else {
+            Serial.println("Error setting up MDNS responder!");
+        }
         
         // [繞過編譯錯誤] 暫時註解掉 setPingInterval。
         // 標準版的 ESPAsyncWebServer 沒有這個方法，會導致編譯失敗。
@@ -500,6 +518,10 @@ public:
             char reply[64];
             snprintf(reply, sizeof(reply), "ODOM,%.2f,%.2f,%.1f", (float)this->odom_x, (float)this->odom_y, (float)this->odom_th * 180.0f / PI);
             _ws.textAll(reply);
+
+            char sonar_reply[64];
+            snprintf(sonar_reply, sizeof(sonar_reply), "SONAR,%.1f,%.1f", (float)this->sonar_l, (float)this->sonar_r);
+            _ws.textAll(sonar_reply);
         }
     }
 
@@ -507,6 +529,11 @@ public:
         this->odom_x = x;
         this->odom_y = y;
         this->odom_th = theta;
+    }
+
+    inline void updateSonar(float l, float r) {
+        this->sonar_l = l;
+        this->sonar_r = r;
     }
     
     inline void broadcastText(const char* message) {
