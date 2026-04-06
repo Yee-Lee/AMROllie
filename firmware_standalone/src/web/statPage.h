@@ -164,38 +164,46 @@ public:
     }
 };
 
-// --- 註冊路由端點函式 ---
-inline void setupStatWebUI(AsyncWebServer* server, DataLogger* logger, portMUX_TYPE* mux) {
-    server->on("/stats", HTTP_GET, [](AsyncWebServerRequest *request){
-        request->send(200, "text/html", stats_html);
-    });
+class StatWebUI {
+public:
+    StatWebUI(DataLogger* logger, portMUX_TYPE* mux) : _logger(logger), _mux(mux) {}
 
-    server->on("/api/stats", HTTP_GET, [logger, mux](AsyncWebServerRequest *request) {
-        portENTER_CRITICAL(mux);
-        int alloc_count = logger->getCount();
-        portEXIT_CRITICAL(mux);
+    inline void attachToServer(AsyncWebServer* server) {
+        server->on("/stats", HTTP_GET, [](AsyncWebServerRequest *request){
+            request->send(200, "text/html", stats_html);
+        });
 
-        if (alloc_count == 0) {
-            request->send(200, "application/json", "[]");
-            return;
-        }
+        server->on("/api/stats", HTTP_GET, [this](AsyncWebServerRequest *request) {
+            portENTER_CRITICAL(_mux);
+            int alloc_count = _logger->getCount();
+            portEXIT_CRITICAL(_mux);
 
-        RobotState* records_copy = (RobotState*)malloc(alloc_count * sizeof(RobotState));
-        if (!records_copy) {
-            request->send(500, "text/plain", "Memory Error");
-            return;
-        }
+            if (alloc_count == 0) {
+                request->send(200, "application/json", "[]");
+                return;
+            }
 
-        int actual_count = 0;
-        portENTER_CRITICAL(mux);
-        actual_count = logger->getCount();
-        if (actual_count > alloc_count) actual_count = alloc_count; 
-        for (int i = 0; i < actual_count; i++) records_copy[i] = logger->getRecord(i);
-        portEXIT_CRITICAL(mux);
+            RobotState* records_copy = (RobotState*)malloc(alloc_count * sizeof(RobotState));
+            if (!records_copy) {
+                request->send(500, "text/plain", "Memory Error");
+                return;
+            }
 
-        StatsJSONResponse *response = new StatsJSONResponse(records_copy, actual_count);
-        request->send(response);
-    });
-}
+            int actual_count = 0;
+            portENTER_CRITICAL(_mux);
+            actual_count = _logger->getCount();
+            if (actual_count > alloc_count) actual_count = alloc_count; 
+            for (int i = 0; i < actual_count; i++) records_copy[i] = _logger->getRecord(i);
+            portEXIT_CRITICAL(_mux);
+
+            StatsJSONResponse *response = new StatsJSONResponse(records_copy, actual_count);
+            request->send(response);
+        });
+    }
+
+private:
+    DataLogger* _logger;
+    portMUX_TYPE* _mux;
+};
 
 #endif

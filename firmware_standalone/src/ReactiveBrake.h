@@ -3,12 +3,8 @@
 
 #include <Arduino.h>
 #include "PIDController.h"
+#include "config.h"
 
-// --- 硬體接腳定義 ---
-#define TRIG_PIN_L 32
-#define ECHO_PIN_L 33
-#define TRIG_PIN_R 23
-#define ECHO_PIN_R 5 // Spec says 52, which is invalid. Using 5.
 
 class ReactiveBrake {
 private:
@@ -22,8 +18,8 @@ private:
     PIDController* _rightPID;
 
     // 演算法參數
-    const float DANGER_ZONE = 18.0f;  // cm
-    const float WARNING_ZONE = 35.0f; // cm
+    const float DANGER_ZONE = SONAR_DANGER_ZONE;
+    const float WARNING_ZONE = SONAR_WARNING_ZONE;
 
     // 感測器更新計時
     unsigned long _last_trigger_time = 0;
@@ -41,18 +37,18 @@ public:
      * @brief 初始化 ReactiveBrake 模組，設定腳位模式與中斷
      */
     void init() {
-        pinMode(TRIG_PIN_L, OUTPUT);
-        pinMode(ECHO_PIN_L, INPUT_PULLDOWN); 
+        pinMode(SONAR_L_TRIG, OUTPUT);
+        pinMode(SONAR_L_ECHO, INPUT_PULLDOWN); 
 
-        pinMode(TRIG_PIN_R, OUTPUT);
-        pinMode(ECHO_PIN_R, INPUT_PULLDOWN);
+        pinMode(SONAR_R_TRIG, OUTPUT);
+        pinMode(SONAR_R_ECHO, INPUT_PULLDOWN);
 
-        digitalWrite(TRIG_PIN_L, LOW);
-        digitalWrite(TRIG_PIN_R, LOW);
+        digitalWrite(SONAR_L_TRIG, LOW);
+        digitalWrite(SONAR_R_TRIG, LOW);
 
-        // 綁定中斷，監聽 ECHO 腳位的電位變化 (RISING and FALLING)
-        attachInterrupt(digitalPinToInterrupt(ECHO_PIN_L), left_echo_isr, CHANGE);
-        attachInterrupt(digitalPinToInterrupt(ECHO_PIN_R), right_echo_isr, CHANGE);
+        // 綁定中斷，監聽 ECHO 腳位的電位變化 (CHANGE)
+        attachInterrupt(digitalPinToInterrupt(SONAR_L_ECHO), left_echo_isr, CHANGE);
+        attachInterrupt(digitalPinToInterrupt(SONAR_R_ECHO), right_echo_isr, CHANGE);
         
         Serial.println("ReactiveBrake module initialized.");
     }
@@ -66,13 +62,13 @@ public:
             _last_trigger_time = millis();
 
             if (_is_left_sensor_next) {
-                digitalWrite(TRIG_PIN_L, HIGH);
+                digitalWrite(SONAR_L_TRIG, HIGH);
                 delayMicroseconds(10);
-                digitalWrite(TRIG_PIN_L, LOW);
+                digitalWrite(SONAR_L_TRIG, LOW);
             } else {
-                digitalWrite(TRIG_PIN_R, HIGH);
+                digitalWrite(SONAR_R_TRIG, HIGH);
                 delayMicroseconds(10);
-                digitalWrite(TRIG_PIN_R, LOW);
+                digitalWrite(SONAR_R_TRIG, LOW);
             }
             _is_left_sensor_next = !_is_left_sensor_next;
         }
@@ -131,7 +127,7 @@ volatile unsigned long ReactiveBrake::_duration_R = 58250;
 // --- 靜態中斷服務常式 (ISR) 實體 ---
 void IRAM_ATTR ReactiveBrake::left_echo_isr() {
     uint32_t now = micros();
-    if (GPIO.in1.val & (1UL << (ECHO_PIN_L - 32))) { 
+    if (GPIO.in1.val & (1UL << (SONAR_L_ECHO - 32))) { 
         _echo_start_time_L = now;
     } else { 
         // 確保真的有先觸發過上升沿才計算
@@ -149,7 +145,7 @@ void IRAM_ATTR ReactiveBrake::left_echo_isr() {
 
 void IRAM_ATTR ReactiveBrake::right_echo_isr() {
     uint32_t now = micros();
-    if (GPIO.in & (1UL << ECHO_PIN_R)) { 
+    if (GPIO.in & (1UL << SONAR_R_ECHO)) { 
         _echo_start_time_R = now;
     } else { 
         if (_echo_start_time_R != 0) {

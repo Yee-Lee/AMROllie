@@ -2,10 +2,8 @@
 #define JOYSTICK_WEB_UI_H
 
 #include <Arduino.h>
-#include <WiFi.h>
 #include <ESPAsyncWebServer.h>
-#include <esp_wifi.h>
-#include <ESPmDNS.h>
+#include "config.h"
 
 static const char index_html[] PROGMEM = R"raw(
 <!DOCTYPE HTML>
@@ -423,26 +421,10 @@ public:
     volatile float sonar_l = 999.0f;
     volatile float sonar_r = 999.0f;
 
-    inline JoystickWebUI() : _server(80), _ws("/ws") {}
+    inline JoystickWebUI() : _ws("/ws") {}
     
-    inline void begin(const char* ssid, const char* password) {
-        WiFi.begin(ssid, password);
-        while (WiFi.status() != WL_CONNECTED) { delay(500); }
-        Serial.println(WiFi.localIP());
+    inline void attachToServer(AsyncWebServer* server) {
 
-        esp_wifi_set_ps(WIFI_PS_NONE); 
-        WiFi.setSleep(false); 
-        
-        // 啟動 mDNS，設定 hostname 為 esp32-ollie
-        if (MDNS.begin("esp32-ollie")) {
-            Serial.println("mDNS responder started. Access via http://esp32-ollie.local");
-        } else {
-            Serial.println("Error setting up MDNS responder!");
-        }
-        
-        // [繞過編譯錯誤] 暫時註解掉 setPingInterval。
-        // 標準版的 ESPAsyncWebServer 沒有這個方法，會導致編譯失敗。
-        // _ws.setPingInterval(2000); 
 
         _ws.onEvent([this](AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
             switch (type) {
@@ -494,11 +476,10 @@ public:
             }
         });
 
-        _server.addHandler(&_ws);
-        _server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){ 
+        server->addHandler(&_ws);
+        server->on("/joystick", HTTP_GET, [](AsyncWebServerRequest *request){ 
             request->send(200, "text/html", index_html); 
         });
-        _server.begin();
     }
     
     inline void cleanup() { 
@@ -544,12 +525,7 @@ public:
         return _ws.getClients().size();
     }
 
-    inline AsyncWebServer& getServer() {
-        return _server;
-    }
-
 private:
-    AsyncWebServer _server;
     AsyncWebSocket _ws;
 };
 

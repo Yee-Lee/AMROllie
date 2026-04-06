@@ -12,6 +12,22 @@
 - `include/`：**全域標頭檔**（若有需要）。
 - `docs/`：**專案文件**。包含架構說明、重構原則、以及各項測試的說明文件。
 
+## 配置與參數管理 (Configuration)
+
+專案將所有硬體腳位（Pins）、實體機構參數、PID 控制參數及網路設定，統一抽離集中至 `src/config.h` 進行管理。
+- **`config.h.default`**：為配置檔的預設範本。初次取得專案後，請將其複製並命名為 `config.h`，再填入正確的 WiFi SSID 與密碼。
+- `config.h` 應被加入 `.gitignore` 中，以避免將個人的網路敏感資訊提交至版本控制系統。
+
+## Web 伺服器架構 (Web Server UI)
+
+為保持主程式整潔與高度可擴充性，本專案採用階層式的 Web Server 設計 (`main --> WebServerManager --> Pages`)：
+
+- **核心管理 (`WebServerManager.h`)**：專注於網路基礎建設，包含 WiFi 連線、mDNS (`esp32-ollie.local`) 註冊，以及啟動並管理 `AsyncWebServer` 實體。
+- **頁面模組 (`src/web/` 目錄)**：每個 UI 頁面與功能（例如入口首頁 `indexPage.h`、遙控介面 `JoystickPage.h`、數據監控 `statPage.h`）均被封裝為獨立模組。
+- **擴充方式**：若要新增新的網頁介面，只需在 `src/web/` 下建立新的頁面類別，實作 `attachToServer(AsyncWebServer* server)` 方法來註冊 HTTP 路由或 WebSocket，並在 `main.cpp` 中將其掛載到 `webServer` 即可。
+  
+> 💡 **Tip:** 若於 `example/` 建立單獨測試環境，亦可隨意 include 指定的 Web Page 模組來快速搭建測試網頁。
+
 ## 編譯專案的原則
 
 專案的編譯環境設定統一管理於 `platformio.ini` 中，遵循以下規則：

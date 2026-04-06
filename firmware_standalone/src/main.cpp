@@ -2,19 +2,22 @@
 #include <WiFi.h>
 
 #include "Motor.h"
-#include "JoystickWebUI.h"
 #include "PIDController.h"
 #include "MotionController.h" 
 #include "AngularVelocityController.h"
 #include "Odometry.h"
 #include "config.h"
 #include "DataLogger.h"
-#include "statWebUI.h"
 #include "ReactiveBrake.h"
+
+#include "WebServerManager.h"
+#include "web/indexPage.h"
+#include "web/statPage.h"
+#include "web/JoystickPage.h"
+
 #include <freertos/FreeRTOS.h> // For portMUX_TYPE
 
 // --- IMU 與角速度 PID ---
-#define MPU_INT_PIN 4 
 volatile bool mpuDataReady = false;
 void IRAM_ATTR mpuISR() {
     mpuDataReady = true;
@@ -24,28 +27,30 @@ void IRAM_ATTR mpuISR() {
 // Kp: 降低比例增益，減少對瞬間誤差的過度反應。
 // Ki: 稍微降低積分增益，因為 P 和 D 的協同作用會更有效。
 // Kd: 顯著提高微分增益，以抑制震盪 (蛇行)。
-AngularVelocityController angular_w_controller(0.4, 0.9, 0.2, 50); 
+AngularVelocityController angular_w_controller(IMU_PID_KP, IMU_PID_KI, IMU_PID_KD, IMU_PID_HZ); 
 float w_correction = 0.0f; 
 
 // --- 執行機構與 PID 定義 ---
-Motor leftMotor = Motor(12, 14, 13, 18, 34, 292, false, 5);
-Motor rightMotor = Motor(27, 26, 25, 19, 35, 292, true, 5);
-PIDController leftPID(&leftMotor, 1.7, 3.8, 0.005, 50.0, 100); 
-PIDController rightPID(&rightMotor, 1.7, 3.8, 0.005, 50.0, 100); 
+Motor leftMotor = Motor(MOTOR_L_IN1, MOTOR_L_IN2, MOTOR_L_PWM, MOTOR_L_ENC_A, MOTOR_L_ENC_B, MOTOR_CPR, false, 5);
+Motor rightMotor = Motor(MOTOR_R_IN1, MOTOR_R_IN2, MOTOR_R_PWM, MOTOR_R_ENC_A, MOTOR_R_ENC_B, MOTOR_CPR, true, 5);
+PIDController leftPID(&leftMotor, MOTOR_PID_KP, MOTOR_PID_KI, MOTOR_PID_KD, MOTOR_PID_LIMIT, MOTOR_PID_HZ); 
+PIDController rightPID(&rightMotor, MOTOR_PID_KP, MOTOR_PID_KI, MOTOR_PID_KD, MOTOR_PID_LIMIT, MOTOR_PID_HZ); 
 
 
 // 控制組件實體
-JoystickWebUI webUI;
-MotionController motionController(&leftPID, &rightPID, 0.135f, 0.065f); // 輪距 13.5cm, 輪徑 6.5cm
+WebServerManager webServer;
+IndexPage indexPage;
+JoystickWebUI joystickPage;
+MotionController motionController(&leftPID, &rightPID, WHEEL_BASE, WHEEL_DIAMETER);
 
 // 超音波與反應式煞車 (先傳入 PID 但暫不使用其 filter 煞車功能，僅讀取距離)
 ReactiveBrake reactiveBrake(&leftPID, &rightPID);
 
-// 里程計融合實體 (輪徑 6.5cm, 輪距 13.5cm)
-Odometry odom(0.065f, 0.135f);
+// 里程計融合實體
+Odometry odom(WHEEL_DIAMETER, WHEEL_BASE);
 
 // 全局運動參數
-float max_rpm_limit = 80.0f;
+float max_rpm_limit = MAX_RPM_NORMAL;
 bool is_motion_test_mode = false;
 
 unsigned long lastLogTime = 0;
@@ -53,6 +58,7 @@ unsigned long lastStatusTime = 0;
 unsigned long lastDataLogTime = 0;
 DataLogger dataLogger;
 static portMUX_TYPE dataLoggerMux = portMUX_INITIALIZER_UNLOCKED;
+StatWebUI statPage(&dataLogger, &dataLoggerMux);
 
 void setup() {
     Serial.begin(115200);
@@ -72,55 +78,60 @@ void setup() {
     // 初始化超音波感測器
     reactiveBrake.init();
 
-    float initial_max_v = (max_rpm_limit * PI * 0.065f) / 60.0f;
+    float initial_max_v = (max_rpm_limit * PI * WHEEL_DIAMETER) / 60.0f;
     motionController.setLimits(initial_max_v, 3.0f, 0.5f, 2.0f);
     Serial.printf("Initial max speed set to %.1f RPM (%.2f m/s)\n", max_rpm_limit, initial_max_v);
 
-    // WiFi 連線邏輯
-    webUI.begin(WIFI_SSID, WIFI_PASSWORD);
+    // WiFi 連線與核心 Web Server 初始化
+    webServer.begin(WIFI_SSID, WIFI_PASSWORD);
 
-    // 註冊數據監控頁面與 API 路由 (封裝在 statWebUI.h 中)
-    setupStatWebUI(&webUI.getServer(), &dataLogger, &dataLoggerMux);
+    // 註冊各個 UI 頁面 (Pages)
+    indexPage.attachToServer(webServer.getServer());
+    joystickPage.attachToServer(webServer.getServer());
+    statPage.attachToServer(webServer.getServer());
+
+    // 啟動 Web Server
+    webServer.start();
 
     motionController.begin();
     odom.begin();
 }
 
 void loop() {
-    // 1. 維護網路通訊
-    webUI.cleanup();
+    // 1. 維護網路通訊 (處理 WebSocket 等連線清理)
+    joystickPage.cleanup();
 
-    if (webUI.request_odom_reset) {
+    if (joystickPage.request_odom_reset) {
         odom.reset();
-        webUI.request_odom_reset = false;
+        joystickPage.request_odom_reset = false;
         Serial.println("--> Odometry Reset to (0, 0, 0)");
     }
 
-    if (webUI.motion_test_active != is_motion_test_mode) {
-        is_motion_test_mode = webUI.motion_test_active;
+    if (joystickPage.motion_test_active != is_motion_test_mode) {
+        is_motion_test_mode = joystickPage.motion_test_active;
         if (is_motion_test_mode) {
-            max_rpm_limit = 60.0f;
-            Serial.println("--> Motion Test Mode ON: Max speed set to 60 RPM");
+            max_rpm_limit = MAX_RPM_TEST;
+            Serial.printf("--> Motion Test Mode ON: Max speed set to %.1f RPM\n", MAX_RPM_TEST);
         } else {
-            max_rpm_limit = 80.0f;
-            Serial.println("--> Motion Test Mode OFF: Max speed set to 80 RPM");
+            max_rpm_limit = MAX_RPM_NORMAL;
+            Serial.printf("--> Motion Test Mode OFF: Max speed set to %.1f RPM\n", MAX_RPM_NORMAL);
         }
-        float new_max_v = (max_rpm_limit * PI * 0.065f) / 60.0f;
+        float new_max_v = (max_rpm_limit * PI * WHEEL_DIAMETER) / 60.0f;
         motionController.setLimits(new_max_v, 3.0f, 0.5f, 2.0f);
         Serial.printf("    New max linear velocity: %.2f m/s\n", new_max_v);
     }
 
     // 2. 超音波更新與 WebUI 推送
     reactiveBrake.updateSensors();
-    webUI.updateSonar(reactiveBrake.getLeftDistance(), reactiveBrake.getRightDistance());
+    joystickPage.updateSonar(reactiveBrake.getLeftDistance(), reactiveBrake.getRightDistance());
 
     // 3. 反應式煞車邏輯 (Reactive Brake Filter)
-    float safe_v = webUI.target_v;
-    float safe_w = webUI.target_w;
+    float safe_v = joystickPage.target_v;
+    float safe_w = joystickPage.target_w;
     
     // 只有「前進」時才觸發前方超音波防撞 (避免倒車也被煞停)
-    if (webUI.target_v > 0) {
-        reactiveBrake.filter(webUI.target_v, webUI.target_w, safe_v, safe_w);
+    if (joystickPage.target_v > 0) {
+        reactiveBrake.filter(joystickPage.target_v, joystickPage.target_w, safe_v, safe_w);
     }
 
     // 4. 運動學解算與馬達 PID 更新 (使用過濾後的安全速度 safe_v, safe_w)
@@ -154,14 +165,14 @@ void loop() {
 
     // 6. 更新全局里程計
     odom.update(leftMotor.getCurrRPM(), rightMotor.getCurrRPM(), angular_w_controller.getActualW());
-    webUI.updateOdom(odom.getX(), odom.getY(), odom.getTheta());
+    joystickPage.updateOdom(odom.getX(), odom.getY(), odom.getTheta());
 
 
     // 6.5 定期紀錄狀態數據 (每 100ms 紀錄一筆，可涵蓋最近 51.2 秒的軌跡狀態)
     if (millis() - lastDataLogTime > 100) {
         portENTER_CRITICAL(&dataLoggerMux);
         dataLogger.logData(
-            webUI.target_v, webUI.target_w, tele.current_v, tele.current_w,
+            joystickPage.target_v, joystickPage.target_w, tele.current_v, tele.current_w,
             odom.getX(), odom.getY(), odom.getTheta(),
             leftMotor.getCurrRPM(), rightMotor.getCurrRPM(), angular_w_controller.getActualW(), w_correction
         );
@@ -173,7 +184,7 @@ void loop() {
     if (millis() - lastLogTime > 50) {
         Serial.printf("[%6lu] >Joy(V:%5.2f W:%5.2f) Pose(X:%5.2f Y:%5.2f Th:%5.2f) | L_Act:%5.1f R_Act:%5.1f | Gyro_W:%5.2f Corr:%5.2f\n", 
                       millis(),
-                      webUI.target_v, webUI.target_w,
+                      joystickPage.target_v, joystickPage.target_w,
                       odom.getX(), odom.getY(), odom.getTheta(), 
                       leftMotor.getCurrRPM(), rightMotor.getCurrRPM(), 
                       angular_w_controller.getActualW(), w_correction);
