@@ -1,18 +1,10 @@
-/**
- * ============================================================================
- * 檔案: MotorWebUI.h
- * 描述: Ollie 控制監控系統 - 終端機大容量數據支援
- * 更新: 提升終端機緩存至 500 筆資料，優化大量資料下的捲動效能與 CSS 布局。
- * ============================================================================
- */
-#ifndef MOTOR_WEBUI_H
-#define MOTOR_WEBUI_H
+#ifndef MOTOR_SCAN_PAGE_H
+#define MOTOR_SCAN_PAGE_H
 
-#include <WiFi.h>
-#include <AsyncTCP.h>
+#include <Arduino.h>
 #include <ESPAsyncWebServer.h>
 
-const char index_html[] PROGMEM = R"rawliteral(
+static const char motorscan_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -92,7 +84,7 @@ const char index_html[] PROGMEM = R"rawliteral(
     <div class="container">
         <div class="header-row">
             <div class="title-group">
-                <h3>OLLIE_SYS_v3.3</h3>
+                <h3>MOTOR SCANNER</h3>
                 <div class="motor-selector">
                     <span style="font-size: 0.75rem; color: var(--text-dim);">MOTOR:</span>
                     <select id="motorSelect" onchange="changeMotor()">
@@ -145,120 +137,50 @@ const char index_html[] PROGMEM = R"rawliteral(
 
         const chart = new Chart(ctx, {
             type: 'line',
-            data: {
-                datasets: [{
-                    label: 'Motor RPM',
-                    borderColor: '#6366f1',
-                    data: [], 
-                    fill: false,
-                    pointRadius: 1,
-                    borderWidth: 2,
-                    tension: 0.2
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                animation: false,
-                scales: {
-                    x: { 
-                        type: 'linear',
-                        min: 0, max: 40, 
-                        title: { display: true, text: 'Time (s)', color: '#94a3b8' },
-                        grid: { color: '#1e293b' }, 
-                        ticks: { color: '#94a3b8' }
-                    },
-                    y: { 
-                        min: 0, max: 500,
-                        title: { display: true, text: 'RPM', color: '#94a3b8' },
-                        grid: { color: '#1e293b' },
-                        ticks: { color: '#94a3b8' }
-                    }
-                },
-                plugins: { legend: { display: false } }
-            }
+            data: { datasets: [{ label: 'Motor RPM', borderColor: '#6366f1', data: [], fill: false, pointRadius: 1, borderWidth: 2, tension: 0.2 }] },
+            options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { type: 'linear', min: 0, max: 40, grid: { color: '#1e293b' }, ticks: { color: '#94a3b8' } }, y: { min: 0, max: 500, grid: { color: '#1e293b' }, ticks: { color: '#94a3b8' } } }, plugins: { legend: { display: false } } }
         });
 
         function initWebSocket() {
             ws = new WebSocket(`ws://${window.location.hostname}/ws`);
             const statusTag = document.getElementById('statusTag');
-            
             ws.onopen = () => { statusTag.textContent = "● CONNECTED"; statusTag.style.color = "#10b981"; };
             ws.onclose = () => { statusTag.textContent = "● DISCONNECTED"; statusTag.style.color = "#ef4444"; setTimeout(initWebSocket, 2000); };
-            
             ws.onmessage = (e) => {
                 if(!isRunning) return;
                 if(e.data.startsWith("D,")) {
                     const parts = e.data.split(",");
                     if(parts.length < 5) return;
-                    const rpm = parseFloat(parts[2]);
-                    const pwm = parts[3];
-                    const sState = parts[4];
-                    const timeS = ((Date.now() - startTime)/1000);
-                    
+                    const rpm = parseFloat(parts[2]), pwm = parts[3], sState = parts[4], timeS = ((Date.now() - startTime)/1000);
                     document.getElementById('scannerState').textContent = sState;
-                    
                     const row = document.createElement('div');
                     row.className = 'term-row';
                     row.innerHTML = `<span class="term-ts">${timeS.toFixed(1)}s</span><span class="term-val-rpm">R: ${rpm.toFixed(1)}</span><span class="term-val-pwm">P: ${pwm}</span>`;
-                    
                     terminal.appendChild(row);
-
-                    // 提升緩存上限至 500 筆資料
-                    if(terminal.childNodes.length > 500) {
-                        terminal.removeChild(terminal.firstChild);
-                    }
-
-                    // 強化的自動捲動機制
-                    requestAnimationFrame(() => {
-                        terminal.scrollTop = terminal.scrollHeight;
-                    });
-
+                    if(terminal.childNodes.length > 500) terminal.removeChild(terminal.firstChild);
+                    requestAnimationFrame(() => { terminal.scrollTop = terminal.scrollHeight; });
                     chart.data.datasets[0].data.push({x: timeS, y: rpm});
-                    if(timeS > chart.options.scales.x.max) {
-                        chart.options.scales.x.min = timeS - 35;
-                        chart.options.scales.x.max = timeS + 5;
-                    }
+                    if(timeS > chart.options.scales.x.max) { chart.options.scales.x.min = timeS - 35; chart.options.scales.x.max = timeS + 5; }
                     chart.update('none');
                 }
             };
         }
 
-        function changeMotor() {
-            if(!isRunning) {
-                ws.send("MOTOR," + motorSelect.value);
-            }
-        }
+        function changeMotor() { if(!isRunning) ws.send("MOTOR," + motorSelect.value); }
 
         function toggleState() {
             isRunning = !isRunning;
-            const btn = document.getElementById('stateBtn');
-            const stateText = document.getElementById('systemState');
-            const scanText = document.getElementById('scannerState');
-            const manualCheck = document.getElementById('manualCheck');
-            
+            const btn = document.getElementById('stateBtn'), stateText = document.getElementById('systemState'), scanText = document.getElementById('scannerState'), manualCheck = document.getElementById('manualCheck');
             if(isRunning) {
-                motorSelect.disabled = true;
-                manualCheck.disabled = true;
-                motorLockMsg.style.display = "inline";
-                startTime = Date.now();
-                terminal.innerHTML = '';
-                chart.data.datasets[0].data = [];
-                chart.options.scales.x.min = 0;
-                chart.options.scales.x.max = 40;
-                chart.update();
+                motorSelect.disabled = true; manualCheck.disabled = true; motorLockMsg.style.display = "inline";
+                startTime = Date.now(); terminal.innerHTML = ''; chart.data.datasets[0].data = [];
+                chart.options.scales.x.min = 0; chart.options.scales.x.max = 40; chart.update();
                 ws.send("STATE,1," + (manualCheck.checked ? "1" : "0"));
-                stateText.textContent = "RUNNING";
-                stateText.style.color = "#10b981";
+                stateText.textContent = "RUNNING"; stateText.style.color = "#10b981";
                 btn.textContent = "Stop System"; btn.className = "btn-running";
             } else {
-                motorSelect.disabled = false;
-                manualCheck.disabled = false;
-                motorLockMsg.style.display = "none";
-                ws.send("STATE,0");
-                stateText.textContent = "IDLE";
-                stateText.style.color = "#94a3b8";
-                scanText.textContent = "IDLE";
+                motorSelect.disabled = false; manualCheck.disabled = false; motorLockMsg.style.display = "none";
+                ws.send("STATE,0"); stateText.textContent = "IDLE"; stateText.style.color = "#94a3b8"; scanText.textContent = "IDLE";
                 btn.textContent = "Start System"; btn.className = "btn-idle";
             }
         }
@@ -268,96 +190,63 @@ const char index_html[] PROGMEM = R"rawliteral(
 </html>
 )rawliteral";
 
-class IMotor;
+class MotorScanPage {
+public:
+    volatile int state = 0; // 0: IDLE, 1: RUNNING
+    volatile bool manualMode = false;
+    volatile int selectedMotorIdx = 0;
+    volatile bool motorChangedFlag = true;
 
-class MotorWebUI {
-private:
-    AsyncWebServer server;
-    AsyncWebSocket ws;
-    int* _state;       
-    bool* _manualMode;
-    IMotor* _motor;    
-    int selectedMotorIdx = 0; 
-    bool motorChangedFlag = true; 
-    unsigned long lastBroadcastTime = 0;
+    MotorScanPage() : _ws("/ws") {}
 
-    void onEvent(AsyncWebSocket *s, AsyncWebSocketClient *c, AwsEventType type, void *arg, uint8_t *data, size_t len) {
-        if (type == WS_EVT_DATA) {
-            data[len] = 0;
-            String msg = (char*)data;
-            if (msg.startsWith("STATE,")) {
-                String payload = msg.substring(6);
-                int commaIdx = payload.indexOf(',');
-                if (commaIdx != -1) {
-                    *_state = payload.substring(0, commaIdx).toInt();
-                    if (_manualMode) *_manualMode = (payload.substring(commaIdx + 1).toInt() == 1);
-                } else {
-                    *_state = payload.toInt();
+    inline void attachToServer(AsyncWebServer* server) {
+        _ws.onEvent([this](AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
+            if (type == WS_EVT_DATA) {
+                data[len] = '\0';
+                String msg = (char*)data;
+                if (msg.startsWith("STATE,")) {
+                    int commaIdx = msg.indexOf(',', 6);
+                    this->state = msg.substring(6, commaIdx != -1 ? commaIdx : msg.length()).toInt();
+                    if (commaIdx != -1) this->manualMode = (msg.substring(commaIdx + 1).toInt() == 1);
+                } else if (msg.startsWith("MOTOR,")) {
+                    int newIdx = msg.substring(6).toInt();
+                    if (newIdx != this->selectedMotorIdx) {
+                        this->selectedMotorIdx = newIdx;
+                        this->motorChangedFlag = true;
+                    }
                 }
+            }
+        });
 
-                if (*_state == 0 && _motor != nullptr) {
-                    _motor->stop(); 
-                }
-            } else if (msg.startsWith("MOTOR,")) {
-                int newIdx = msg.substring(6).toInt();
-                if (newIdx != selectedMotorIdx) {
-                    selectedMotorIdx = newIdx;
-                    motorChangedFlag = true; 
-                }
+        server->addHandler(&_ws);
+        server->on("/scan", HTTP_GET, [](AsyncWebServerRequest *request){
+            request->send(200, "text/html", motorscan_html);
+        });
+    }
+
+    bool hasMotorChanged() {
+        bool changed = motorChangedFlag;
+        motorChangedFlag = false;
+        return changed;
+    }
+
+    void broadcastData(unsigned long t, float current_rpm, float pwm, const char* scannerState = "SCAN") {
+        if (_ws.count() > 0 && _ws.availableForWriteAll()) {
+            unsigned long now = millis();
+            if (now - _lastBroadcastTime >= 50) { 
+                _lastBroadcastTime = now;
+                char buf[128];
+                snprintf(buf, sizeof(buf), "D,%lu,%.1f,%.0f,%s", t, current_rpm, pwm, scannerState);
+                _ws.textAll(buf);
             }
         }
     }
 
-public:
-    MotorWebUI(IMotor* m, int* s, bool* manual) : server(80), ws("/ws"), _motor(m), _state(s), _manualMode(manual) {}
+    void cleanup() { _ws.cleanupClients(); }
 
-    void setCurrentMotor(IMotor* m) { _motor = m; }
-
-    bool hasMotorChanged() {
-        if (motorChangedFlag) {
-            motorChangedFlag = false;
-            return true;
-        }
-        return false;
-    }
-
-    void begin(const char* ssid, const char* pass) {
-        Serial.printf("Connecting to %s ", ssid);
-        WiFi.begin(ssid, pass);
-        while (WiFi.status() != WL_CONNECTED) {
-            delay(500);
-            Serial.print(".");
-        }
-        
-        WiFi.setSleep(false); 
-
-        Serial.println("\nWiFi Connected!");
-        Serial.print("IP Address: ");
-        Serial.println(WiFi.localIP());
-        
-        ws.onEvent([this](AsyncWebSocket *s, AsyncWebSocketClient *c, AwsEventType t, void *a, uint8_t *d, size_t l) {
-            this->onEvent(s, c, t, a, d, l);
-        });
-        server.addHandler(&ws);
-        server.on("/", HTTP_GET, [](AsyncWebServerRequest *r){
-            r->send(200, "text/html", index_html);
-        });
-        server.begin();
-    }
-
-    int getSelectedMotorIndex() const { return selectedMotorIdx; }
-
-    void broadcastData(unsigned long t, float current, float pwm, const char* scannerState = "SCAN") {
-        if (ws.count() > 0 && ws.availableForWriteAll()) {
-            if (millis() - lastBroadcastTime < 50) return; 
-            lastBroadcastTime = millis();
-            char buf[128];
-            snprintf(buf, sizeof(buf), "D,%lu,%.1f,%.0f,%s", t, current, pwm, scannerState);
-            ws.textAll(buf);
-        }
-    }
-
-    void cleanup() { ws.cleanupClients(); }
+private:
+    AsyncWebSocket _ws;
+    unsigned long _lastBroadcastTime = 0;
 };
 
 #endif
