@@ -48,3 +48,19 @@
 1. 新增的測試程式碼**不要**混入 `src/` 目錄，應獨立建立在 `example/` 下。
 2. `src/` 中的模組應盡量降低耦合度，方便在 `example/` 中被單獨 include 進行測試。
 3. 任何新增的環境設定，請遵循上述的 `platformio.ini` 編輯原則。
+
+## 測試專案說明 (Examples)
+
+本專案於 `example/` 目錄下提供了多個獨立的測試與驗證環境，幫助開發者針對單一硬體或模組進行測試與參數調校。
+若要執行以下測試，請在 `platformio.ini` 或 VSCode 面板中切換至對應的編譯環境 (`env`)。
+
+> 💡 **詳細的操作說明與接線方式，請直接進入各個測試目錄下查閱其專屬的 `README.md` 文件。**
+
+- **PID 調試工具 (`example/PIDTest/`)** — `env:pidtest`
+  提供互動式 Web UI，用於即時調整 PID 參數並視覺化馬達的階躍響應（Step Response）曲線。
+- **馬達特性掃描 (`example/motorScan/`)** — `env:motorscan`
+  自動化掃描馬達 PWM 與轉速 (RPM) 的對應關係，尋找啟動區與線性區，並透過網頁圖表呈現。
+- **IMU 單元測試 (`example/imu_ut/`)** — `env:i2c_scan`, `env:mpu6050_test`
+  輕量級底層測試，包含 I2C 匯流排設備掃描與 MPU6050 加速度/角速度/溫度的基礎數據讀取驗證。
+- **超音波感測器測試 (`example/ultrasonic_test/`)** — `env:ultrasonic_test`
+  驗證前/側方雙超音波感測器的硬體讀值是否正確，做為 `ReactiveBrake` 反應式煞車模組的基礎。
