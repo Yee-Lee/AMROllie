@@ -17,7 +17,7 @@ const char index_html[] PROGMEM = R"rawliteral(
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Ollie 控制監控系統</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -30,80 +30,83 @@ const char index_html[] PROGMEM = R"rawliteral(
             --text-main: #f8fafc;
             --text-dim: #94a3b8;
         }
-        body { font-family: 'Segoe UI', 'Consolas', monospace; background: var(--bg-dark); padding: 20px; color: var(--text-main); margin: 0; overflow: hidden; }
-        .container { max-width: 1100px; margin: 0 auto; background: var(--panel-bg); padding: 20px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        body { 
+            font-family: 'Segoe UI', 'Consolas', monospace; background: var(--bg-dark); color: var(--text-main); 
+            margin: 0; padding: 0; height: 100vh; width: 100vw; overflow: hidden; box-sizing: border-box; 
+        }
+        .container { width: 100%; height: 100%; padding: 10px 15px; display: flex; flex-direction: column; gap: 10px; box-sizing: border-box; }
         
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #334155; padding-bottom: 10px; }
-        .status-box { display: flex; gap: 15px; font-size: 0.8rem; font-weight: bold; }
-        .status-item { padding: 2px 8px; border-radius: 4px; background: #0f172a; border: 1px solid #334155; }
+        .header-row { display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; padding-bottom: 8px; border-bottom: 1px solid #334155; }
+        .title-group { display: flex; align-items: center; gap: 15px; }
+        .title-group h3 { margin: 0; font-size: 1.1rem; color: var(--accent); letter-spacing: 0.5px; white-space: nowrap; }
         
-        .motor-selector { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; background: #0f172a; padding: 10px; border-radius: 8px; }
-        select { background: #1e293b; color: #fff; border: 1px solid var(--accent); padding: 5px 15px; border-radius: 4px; cursor: pointer; font-family: inherit; }
+        .motor-selector { display: flex; align-items: center; gap: 8px; background: var(--panel-bg); padding: 4px 10px; border-radius: 6px; }
+        select { background: #0f172a; color: #fff; border: 1px solid var(--accent); padding: 3px 6px; border-radius: 4px; cursor: pointer; font-size: 0.85rem; outline: none; }
         select:disabled { opacity: 0.5; cursor: not-allowed; border-color: #334155; }
 
-        .main-layout { display: grid; grid-template-columns: 1.5fr 1fr; gap: 15px; height: 440px; margin-bottom: 15px; }
-        .chart-section { background: #000; padding: 10px; border-radius: 8px; border: 1px solid #334155; position: relative; overflow: hidden; }
+        .status-box { display: flex; gap: 10px; font-size: 0.75rem; font-weight: bold; align-items: center; white-space: nowrap; }
+        .status-item { padding: 4px 8px; border-radius: 4px; background: var(--panel-bg); border: 1px solid #334155; }
+        
+        .main-layout { display: flex; gap: 15px; flex: 1; min-height: 0; }
+        .chart-section { background: #000; padding: 5px; border-radius: 8px; border: 1px solid #334155; flex: 2; position: relative; min-height: 0; }
         
         .terminal-section { 
-            background: #000; 
-            padding: 15px; 
-            border-radius: 8px; 
-            border: 1px solid #334155; 
-            display: flex; 
-            flex-direction: column; 
-            overflow: hidden; 
-            height: 100%;
-            box-sizing: border-box;
+            background: #000; padding: 8px 12px; border-radius: 8px; border: 1px solid #334155; 
+            flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 220px;
         }
 
-        #terminal { 
-            flex: 1; 
-            overflow-y: auto; 
-            font-size: 0.82rem; 
-            color: var(--success); 
-            white-space: pre-wrap; 
-            line-height: 1.3;
-            scrollbar-width: thin;
-            scrollbar-color: var(--accent) #000;
-        }
-
-        #terminal::-webkit-scrollbar { width: 6px; }
+        #terminal { flex: 1; overflow-y: auto; font-size: 0.75rem; color: var(--success); white-space: pre-wrap; line-height: 1.4; scrollbar-width: thin; scrollbar-color: var(--accent) #000; }
+        #terminal::-webkit-scrollbar { width: 4px; }
         #terminal::-webkit-scrollbar-track { background: #000; }
-        #terminal::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 10px; }
+        #terminal::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 4px; }
 
-        .term-row { display: flex; border-bottom: 1px solid #111; padding: 1px 0; align-items: center; }
-        .term-ts { color: var(--text-dim); width: 60px; flex-shrink: 0; font-size: 0.75rem; }
-        .term-val-rpm { color: #fff; width: 90px; text-align: right; font-weight: bold; flex-shrink: 0; }
-        .term-val-pwm { color: var(--accent); width: 80px; text-align: right; flex-shrink: 0; }
+        .term-row { display: flex; border-bottom: 1px solid #111; padding: 2px 0; align-items: center; }
+        .term-ts { color: var(--text-dim); width: 45px; flex-shrink: 0; }
+        .term-val-rpm { color: #fff; width: 75px; text-align: right; font-weight: bold; flex-shrink: 0; }
+        .term-val-pwm { color: var(--accent); flex: 1; text-align: right; flex-shrink: 0; }
 
-        .btn-container { text-align: center; }
+        .footer-row { display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; padding-top: 5px; }
+        .manual-test { display: flex; align-items: center; font-size: 0.85rem; width: 140px; }
+        .btn-container { flex: 1; display: flex; justify-content: center; }
+        .placeholder { width: 140px; }
+        
         button { 
-            padding: 12px 60px; font-size: 1.1rem; cursor: pointer; border: none; border-radius: 6px; 
+            padding: 8px 40px; font-size: 1rem; cursor: pointer; border: none; border-radius: 6px; 
             color: white; font-weight: 700; transition: all 0.2s; text-transform: uppercase; letter-spacing: 1px;
         }
-        .btn-idle { background: var(--accent); border-bottom: 4px solid #4338ca; }
-        .btn-running { background: var(--danger); border-bottom: 4px solid #991b1b; }
-        button:active { transform: translateY(2px); border-bottom: none; margin-bottom: 4px; }
+        .btn-idle { background: var(--accent); border-bottom: 3px solid #4338ca; }
+        .btn-running { background: var(--danger); border-bottom: 3px solid #991b1b; }
+        button:active { transform: translateY(2px); border-bottom: none; margin-bottom: 3px; }
+
+        @media (orientation: portrait) {
+            .header-row { flex-direction: column; align-items: stretch; gap: 10px; }
+            .title-group { justify-content: space-between; }
+            .status-box { justify-content: space-between; }
+            .main-layout { flex-direction: column; }
+            .footer-row { flex-direction: column; gap: 15px; }
+            .placeholder, .manual-test { width: auto; justify-content: center; }
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <h3 style="margin:0; color:var(--accent);">OLLIE_SYSTEM_v3.3</h3>
+        <div class="header-row">
+            <div class="title-group">
+                <h3>OLLIE_SYS_v3.3</h3>
+                <div class="motor-selector">
+                    <span style="font-size: 0.75rem; color: var(--text-dim);">MOTOR:</span>
+                    <select id="motorSelect" onchange="changeMotor()">
+                        <option value="0">LEFT</option>
+                        <option value="1">RIGHT</option>
+                    </select>
+                    <span id="motorLockMsg" style="font-size: 0.7rem; color: var(--danger); display: none;"> [LOCKED]</span>
+                </div>
+            </div>
             <div class="status-box">
                 <div class="status-item">SCAN: <span id="scannerState" style="color:var(--text-dim)">IDLE</span></div>
                 <div class="status-item">SYS: <span id="systemState" style="color:var(--text-dim)">IDLE</span></div>
-                <div id="statusTag" style="color: var(--text-dim);">● DISCONNECTED</div>
+                <div id="statusTag" style="color: var(--text-dim); margin-left: 5px;">● DISCONNECTED</div>
             </div>
-        </div>
-
-        <div class="motor-selector">
-            <span style="font-size: 0.85rem; color: var(--text-dim);">SELECT MOTOR:</span>
-            <select id="motorSelect" onchange="changeMotor()">
-                <option value="0">LEFT MOTOR</option>
-                <option value="1">RIGHT MOTOR</option>
-            </select>
-            <span id="motorLockMsg" style="font-size: 0.75rem; color: var(--danger); display: none;"> [LOCKED]</span>
         </div>
 
         <div class="main-layout">
@@ -111,20 +114,23 @@ const char index_html[] PROGMEM = R"rawliteral(
                 <canvas id="rpmChart"></canvas>
             </div>
             <div class="terminal-section">
-                <div style="color:var(--text-dim); font-size:0.7rem; margin-bottom:10px; border-bottom:1px solid #333; padding-bottom:5px; display:flex; justify-content:space-between;">
-                    <span>TIMESTAMP</span>
-                    <span>RPM / PWM (BUFF: 500)</span>
+                <div style="color:var(--text-dim); font-size:0.7rem; margin-bottom:6px; border-bottom:1px solid #334155; padding-bottom:4px; display:flex; justify-content:space-between;">
+                    <span>TIME</span>
+                    <span>RPM / PWM (500)</span>
                 </div>
                 <div id="terminal"></div>
             </div>
         </div>
 
-        <div class="btn-container" style="display:flex; align-items:center; justify-content:center; gap:20px;">
-            <div style="display:flex; align-items:center;">
-                <input type="checkbox" id="manualCheck" style="width:18px; height:18px; cursor:pointer;">
-                <label for="manualCheck" style="margin-left:8px; color:var(--text-dim); cursor:pointer;">manual test</label>
+        <div class="footer-row">
+            <div class="manual-test">
+                <input type="checkbox" id="manualCheck" style="width:16px; height:16px; cursor:pointer; margin:0;">
+                <label for="manualCheck" style="margin-left:6px; color:var(--text-dim); cursor:pointer;">Manual Test</label>
             </div>
-            <button id="stateBtn" class="btn-idle" onclick="toggleState()">Start System</button>
+            <div class="btn-container">
+                <button id="stateBtn" class="btn-idle" onclick="toggleState()">START SYSTEM</button>
+            </div>
+            <div class="placeholder"></div>
         </div>
     </div>
 
