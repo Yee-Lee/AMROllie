@@ -64,3 +64,5 @@
   輕量級底層測試，包含 I2C 匯流排設備掃描與 MPU6050 加速度/角速度/溫度的基礎數據讀取驗證。
 - **超音波感測器測試 (`example/ultrasonic_test/`)** — `env:ultrasonic_test`
   驗證前/側方雙超音波感測器的硬體讀值是否正確，做為 `ReactiveBrake` 反應式煞車模組的基礎。
+- **Encoder 脈衝測試 (`example/encoderCheck/`)** — `env:encoder_check`
+  純粹讀取中斷腳位以計算輪子旋轉一圈的 Encoder 脈衝數 (CPR)，用於校準 `config.h` 內的參數。
