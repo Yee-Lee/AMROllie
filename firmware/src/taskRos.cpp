@@ -3,6 +3,7 @@
 #include <rcl/rcl.h>
 #include <rclc/rclc.h>
 #include <rclc/executor.h>
+#include <rmw_microros/rmw_microros.h>
 
 #include <geometry_msgs/msg/twist.h>
 #include <nav_msgs/msg/odometry.h>
@@ -50,7 +51,7 @@ void reset_odom_callback(const void * req, void * res) {
     response->success = true;
 }
 
-// 定期發布 Odom 與 Sonar (10Hz)
+// 定期發布 Odom 與 Sonar (20Hz)
 void timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
     if (timer != NULL) {
         portENTER_CRITICAL(&mux);
@@ -74,26 +75,38 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
         msg_odom.twist.twist.angular.z = current_w;
 
         // 發布 Odom
-        rcl_publish(&pub_odom, &msg_odom, NULL);
+        (void)rcl_publish(&pub_odom, &msg_odom, NULL);
 
         // 發布超音波資料
         msg_sonar_left.range = s_left;
-        rcl_publish(&pub_sonar_left, &msg_sonar_left, NULL);
+        (void)rcl_publish(&pub_sonar_left, &msg_sonar_left, NULL);
         msg_sonar_right.range = s_right;
-        rcl_publish(&pub_sonar_right, &msg_sonar_right, NULL);
+        (void)rcl_publish(&pub_sonar_right, &msg_sonar_right, NULL);
     }
 }
 
 // taskROS (Core 1 - 中優先級)
 void taskROS(void *pvParameters) {
-    // 設定 micro-ROS 傳輸層 (使用預設的 Serial 進行 UART 通訊)
-    set_microros_serial_transports(Serial);
+    // 設定 micro-ROS 傳輸層 (改用 Serial2 與 RPi 通訊)
+    set_microros_serial_transports(Serial2);
     delay(2000); // 等待連線穩定
 
     allocator = rcl_get_default_allocator();
 
-    // 建立 support 與 node
-    rclc_support_init(&support, 0, NULL, &allocator);
+    // 持續等待 micro-ROS Agent 連線 (超時 1000ms，每次間隔 500ms)
+    while (rmw_uros_ping_agent(1000, 1) != RMW_RET_OK) {
+        vTaskDelay(pdMS_TO_TICKS(500));
+    }
+
+    // --- 設定 ROS_DOMAIN_ID 為 30 ---
+    rcl_init_options_t init_options = rcl_get_zero_initialized_init_options();
+    rcl_init_options_init(&init_options, allocator);
+    rcl_init_options_set_domain_id(&init_options, 30);
+
+    // 使用自訂的 options 建立 support，然後釋放 options 記憶體
+    rclc_support_init_with_options(&support, 0, NULL, &init_options, &allocator);
+    rcl_init_options_fini(&init_options);
+
     rclc_node_init_default(&node, "base_controller_node", "", &support);
 
     // --- 初始化 Publisher: /odom ---
@@ -138,8 +151,8 @@ void taskROS(void *pvParameters) {
         &srv_reset_odom, &node,
         ROSIDL_GET_SRV_TYPE_SUPPORT(std_srvs, srv, Trigger), "reset_odom");
 
-    // --- 初始化 Timer (10Hz = 100ms) ---
-    rclc_timer_init_default(&ros_timer, &support, RCL_MS_TO_NS(100), timer_callback);
+    // --- 初始化 Timer (20Hz = 50ms) ---
+    rclc_timer_init_default(&ros_timer, &support, RCL_MS_TO_NS(50), timer_callback);
 
     // --- 初始化 Executor ---
     // 參數 3 代表 Handles 數量: 包含 1 個 Timer, 1 個 Subscriber, 1 個 Service

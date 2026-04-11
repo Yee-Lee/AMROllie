@@ -27,6 +27,10 @@ Odometry odom(WHEEL_DIAMETER, WHEEL_BASE);
 
 float max_rpm_limit = MAX_RPM_NORMAL;
 
+// 引入 Motor.cpp 中的 Debug 變數
+extern long global_debug_pulses_L;
+extern long global_debug_pulses_R;
+
 // --- 初始化函式 ---
 void initBaseControllerHardware() {
     // 初始化 IMU 與中斷
@@ -58,6 +62,8 @@ void taskBaseController(void *pvParameters) {
     TickType_t xLastWakeTime;
     const TickType_t xFrequency = pdMS_TO_TICKS(10); // 10ms = 100Hz
     xLastWakeTime = xTaskGetTickCount();
+    
+    unsigned long last_debug_print = 0;
 
     while(1) {
         // 1. 安全讀取下行指令
@@ -102,9 +108,17 @@ void taskBaseController(void *pvParameters) {
         // 4. 安全寫入上行遙測變數
         portENTER_CRITICAL(&mux);
         odom_x = odom.getX(); odom_y = odom.getY(); odom_theta = odom.getTheta();
-        actual_v = telemetry.current_v; actual_w = telemetry.current_w;
+        actual_v = odom.getLinearV(); actual_w = angular_w_controller.getActualW();
         sonar_left_dist = reactiveBrake.getLeftDistance(); sonar_right_dist = reactiveBrake.getRightDistance();
         portEXIT_CRITICAL(&mux);
+
+        // 5. 每 500ms 透過 USB Serial 印出 Debug 資訊 (完全不影響接在 Serial2 的 micro-ROS)
+        unsigned long now = millis();
+        if (now - last_debug_print >= 500) {
+            last_debug_print = now;
+            Serial.printf("[DEBUG] Pulses L: %ld, R: %ld | Odom X: %.3f, Y: %.3f | V: %.3f | RPM L: %.1f, R: %.1f\n",
+                          global_debug_pulses_L, global_debug_pulses_R, odom_x, odom_y, actual_v, leftMotor.getCurrRPM(), rightMotor.getCurrRPM());
+        }
 
         // 精準延遲以確保 100Hz
         vTaskDelayUntil(&xLastWakeTime, xFrequency);

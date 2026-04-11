@@ -15,6 +15,7 @@ private:
     float x;
     float y;
     float theta;
+    float linear_v;
     
     float wheel_radius;
     float wheel_base;
@@ -23,7 +24,7 @@ private:
 public:
     // 初始化傳入輪徑 (m) 與 輪距 (m)
     Odometry(float wheel_diameter = 0.065f, float wheel_base_dist = 0.135f) 
-        : x(0.0f), y(0.0f), theta(0.0f), 
+        : x(0.0f), y(0.0f), theta(0.0f), linear_v(0.0f),
           wheel_radius(wheel_diameter / 2.0f), wheel_base(wheel_base_dist), 
           last_time(0) {}
 
@@ -36,6 +37,7 @@ public:
         x = 0.0f;
         y = 0.0f;
         theta = 0.0f;
+        linear_v = 0.0f;
     }
 
     // 核心更新：傳入左輪 RPM、右輪 RPM 與 IMU 測量的真實角速度 (rad/s)
@@ -52,6 +54,7 @@ public:
 
         // 2. 底盤當前總線速度 (m/s)
         float v = (v_left + v_right) / 2.0f;
+        linear_v = v;
 
         // 3. 計算位移變化量
         float dS = v * dt;
@@ -71,6 +74,7 @@ public:
     float getX() const { return x; }
     float getY() const { return y; }
     float getTheta() const { return theta; }
+    float getLinearV() const { return linear_v; }
 };
 
 #endif

@@ -1,4 +1,4 @@
-# ESP32 micro-ROS 通訊測試指南 (Raspberry Pi UART)
+# micro-ROS 通訊測試指南 (ESP32 <-> Raspberry Pi)
 
 本指南說明如何透過 UART 將 ESP32 (Base Controller) 連接至 Raspberry Pi 上的 micro-ROS Agent，並正確設定 ROS 2 環境進行通訊。
 
@@ -16,12 +16,12 @@
 
 ## 2. ESP32 韌體確認與燒錄
 
-請確保韌體已完成以下設定：
+請確保韌體已完成以下設定 (目前程式碼已設定好)：
 1. **啟用 Serial2**：`main.cpp` 中初始化 `Serial2.begin(460800, SERIAL_8N1, 16, 17);`。
 2. **綁定傳輸層**：`taskRos.cpp` 中設定 `set_microros_serial_transports(Serial2);`。
 3. **指定 Domain ID**：`taskRos.cpp` 中設定 `rcl_init_options_set_domain_id(&init_options, 30);`。
 
-在 PlatformIO 中選擇 `[env:main]` 環境進行編譯與燒錄。
+編譯並燒錄至 ESP32 (`[env:main]`)。
 
 ---
 
@@ -60,7 +60,7 @@ ros2 daemon start
 # 2. 確認 Topic 是否正常顯示
 ros2 topic list
 
-# 3. 測試上行與下行收發
+# 3. 測試收發
 ros2 topic echo /odom
 ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.1, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.5}}"
 ```
