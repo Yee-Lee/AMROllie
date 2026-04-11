@@ -1,0 +1,26 @@
+# ==============================
+# ROS 2 Workspace Build Files
+# ==============================
+build/
+install/
+log/
+
+# ==============================
+# Python / C++ Caches
+# ==============================
+__pycache__/
+*.py[cod]
+*$py.class
+*.o
+*.so
+
+# ==============================
+# OS Generated Files
+# ==============================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
