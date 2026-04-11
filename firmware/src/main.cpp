@@ -18,6 +18,9 @@ volatile float sonar_left_dist = 0.0, sonar_right_dist = 0.0;
 void setup() {
     Serial.begin(115200);
     
+    // 啟動 Serial2 提供給 micro-ROS 與 RPi 通訊 (提升至 460800 以支援 20Hz 以上的高頻發布)
+    Serial2.begin(460800, SERIAL_8N1, 16, 17);
+
     // 初始化所有底層硬體 (IMU、馬達、PID、超音波等)
     initBaseControllerHardware();
 

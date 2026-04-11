@@ -9,6 +9,10 @@
 
 static uint8_t next_ledc_channel = 0; 
 
+// 用於 Debug 的全域累加脈衝計數器
+long global_debug_pulses_L = 0;
+long global_debug_pulses_R = 0;
+
 Motor::Motor(int in1, int in2, int pwm, int encA, int encB, int cpr, bool reverse, int interval) 
     : _pinIN1(in1), _pinIN2(in2), _pinPWM(pwm),
       _pinEncA(encA), _pinEncB(encB),
@@ -61,6 +65,10 @@ bool Motor::update() {
         long count = _pos;
         _pos = 0; 
         portEXIT_CRITICAL(&_mux);
+        
+        // 攔截並累加原始脈衝 (Channel 0 為左輪，1 為右輪)
+        if (_ledcChannel == 0) global_debug_pulses_L += count;
+        if (_ledcChannel == 1) global_debug_pulses_R += count;
 
         float dt = (float)(now - _lastUpdate) / 1000.0f;
         // RPM 計算公式: (脈衝數 / 每圈脈衝數) / 時間(分)
