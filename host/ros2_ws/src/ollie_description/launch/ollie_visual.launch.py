@@ -32,10 +32,17 @@ def generate_launch_description():
             output='screen',
         ),
         # 3. 啟動 Fake Ollie Core (發布假資料)
+ #       Node(
+ #           package='ollie_description',
+ #           executable='fake_ollie_core.py',
+ #           name='fake_ollie_core',
+ #           output='screen',
+ #       )
+        # 3. 啟動 Real Ollie Core (接收 ESP32 真實資料)
         Node(
             package='ollie_description',
-            executable='fake_ollie_core.py',
-            name='fake_ollie_core',
+            executable='real_ollie_core.py',  # <- 改成 real
+            name='real_ollie_core',
             output='screen',
         )
     ])
