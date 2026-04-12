@@ -20,6 +20,7 @@ private:
     float integral;
     float lastError;
     float lastTargetRPM;
+    int lastPWM;
     
     unsigned long intervalUs; // 計算週期 (微秒)
     unsigned long lastTime;
@@ -31,7 +32,7 @@ public:
     // 預設計算頻率為 100Hz (10ms 週期)
     PIDController(IMotor* m, float p, float i, float d, float iLimit = 50.0f, int hz = 100) 
         : motor(m), kp(p), ki(i), kd(d), targetRPM(0), offsetPWM(0), 
-          integral(0), lastError(0), lastTargetRPM(0), integralLimit(iLimit), firstRun(true) {
+          integral(0), lastError(0), lastTargetRPM(0), lastPWM(0), integralLimit(iLimit), firstRun(true) {
         intervalUs = 1000000 / hz;
         lastTime = micros();
     }
@@ -48,6 +49,8 @@ public:
         offsetPWM = offset;
     }
 
+    int getLastPWM() const { return lastPWM; }
+
     void reset() {
         integral = 0;
         lastError = 0;
@@ -58,7 +61,9 @@ public:
 
     void update() {
         unsigned long now = micros();
-        if (now - lastTime < intervalUs) return;
+        // 扣除 1000us 的寬容值，避免 FreeRTOS vTaskDelayUntil 喚醒時差 (Jitter) 
+        // 導致不小心跳過整個運算週期，造成 PID 頻率減半或不穩
+        if (now - lastTime < intervalUs - 1000) return;
         
         float dt = (now - lastTime) / 1000000.0f;
         lastTime = now;
@@ -102,11 +107,15 @@ public:
         float final_output = 0;
 
         // --- 4. 前饋控制 ---
+        // 動態前饋 (Velocity Feed-Forward)
+        // 根據先前數據，大約每 1 RPM 需要額外 0.9 的 PWM 動力
+        float feed_forward = targetRPM * 0.9f;
+
         if (targetRPM > 0.1f) {
-            final_output = pid_output + offsetPWM;
+            final_output = pid_output + offsetPWM + feed_forward;
         } 
         else if (targetRPM < -0.1f) {
-            final_output = pid_output - offsetPWM;
+            final_output = pid_output - offsetPWM + feed_forward;
         } 
         else {
             final_output = 0; // 目標為 0，強制出力為 0
@@ -115,14 +124,10 @@ public:
         // 限制輸出範圍至硬體極限 (-255 到 255)
         int pwmOut = constrain((int)final_output, -255, 255);
 
+        lastPWM = pwmOut;
+
         // 執行馬達驅動 (IMotor 應根據正負值判斷方向)
         motor->drive(pwmOut);
-
-        // 調試用資訊 (可視需求取消註解)
-        /*
-        Serial.printf("T:%.1f C:%.1f E:%.1f | P:%.1f I:%.1f D:%.1f | PWM:%d\n", 
-                      targetRPM, currentRPM, error, p_term, i_term, d_term, pwmOut);
-        */
     }
 };
 
