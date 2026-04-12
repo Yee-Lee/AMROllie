@@ -1,0 +1,4 @@
+#! /bin/bash 
+
+source install/setup.bash
+ros2 launch ollie_description ollie_visual.launch.py
