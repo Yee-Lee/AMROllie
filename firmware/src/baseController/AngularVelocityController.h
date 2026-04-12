@@ -150,6 +150,13 @@ public:
      * @return float 修正值 (一個無單位的控制量，用於調整輪速)
      */
     float update(float target_w, bool has_new_data) {
+        unsigned long now = micros();
+
+        // 1. 安全機制：超過 200ms 沒更新 (IMU 當機或中斷遺失)，強制角速度歸零，防止卡在轉彎狀態無限積分
+        if ((now - last_time) > 200000) {
+            actual_w = 0.0f;
+        }
+
         if (!has_new_data) {
             // 若無新數據，直接沿用上次的修正量，避免錯誤的微分與時間計算
             return last_output;
@@ -163,7 +170,11 @@ public:
         }
         actual_w = g.gyro.z - gyroZ_offset;
 
-        unsigned long now = micros();
+        // 2. 靜態死區 (Deadband)：消除 MPU6050 轉彎後常見的零偏殘留與漂移
+        if (abs(actual_w) < 0.02f) {
+            actual_w = 0.0f;
+        }
+
         float dt = (now - last_time) / 1000000.0f;
         
         // 確保至少有一個有效的時間間隔

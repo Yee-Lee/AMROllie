@@ -89,7 +89,8 @@ void taskBaseController(void *pvParameters) {
 
         // 3.2 讀取 IMU 姿態並計算角速度補償
         bool has_mpu_data = false;
-        if (mpuDataReady) {
+        // 加入 digitalRead 防呆：若受馬達雜訊干擾漏掉 RISING 邊緣，避免中斷腳位永遠卡死 HIGH
+        if (mpuDataReady || digitalRead(MPU_INT_PIN) == HIGH) {
             has_mpu_data = true;
             mpuDataReady = false; // 清除中斷旗標
         }
@@ -116,8 +117,8 @@ void taskBaseController(void *pvParameters) {
         unsigned long now = millis();
         if (now - last_debug_print >= 500) {
             last_debug_print = now;
-            Serial.printf("[DEBUG] Pulses L: %ld, R: %ld | Odom X: %.3f, Y: %.3f | V: %.3f | RPM L: %.1f, R: %.1f\n",
-                          global_debug_pulses_L, global_debug_pulses_R, odom_x, odom_y, actual_v, leftMotor.getCurrRPM(), rightMotor.getCurrRPM());
+            Serial.printf("[DEBUG] Pulses L: %ld, R: %ld | Odom X: %.3f, Y: %.3f, Theta: %.3f | V: %.3f | RPM L: %.1f, R: %.1f\n",
+                          global_debug_pulses_L, global_debug_pulses_R, odom_x, odom_y, odom_theta, actual_v, leftMotor.getCurrRPM(), rightMotor.getCurrRPM());
         }
 
         // 精準延遲以確保 100Hz
