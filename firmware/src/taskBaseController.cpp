@@ -27,10 +27,6 @@ Odometry odom(WHEEL_DIAMETER, WHEEL_BASE);
 
 float max_rpm_limit = MAX_RPM_NORMAL;
 
-// 引入 Motor.cpp 中的 Debug 變數
-extern long global_debug_pulses_L;
-extern long global_debug_pulses_R;
-
 // --- 初始化函式 ---
 void initBaseControllerHardware() {
     // 初始化 IMU 與中斷
@@ -49,7 +45,9 @@ void initBaseControllerHardware() {
     reactiveBrake.init();
 
     float initial_max_v = (max_rpm_limit * PI * WHEEL_DIAMETER) / 60.0f;
-    motionController.setLimits(initial_max_v, 3.0f, 0.5f, 2.0f);
+    // 提升系統允許的最大加速度，讓起步更為迅速 (線加速度設為 1.5 m/s^2，角加速度設為 4.0 rad/s^2)
+    motionController.setLimits(initial_max_v, 3.0f, 1.5f, 4.0f);
+    Serial.printf("Initial max speed set to %.1f RPM (%.2f m/s)\n", max_rpm_limit, initial_max_v);
 
     motionController.begin();
     odom.begin();
@@ -59,11 +57,15 @@ void initBaseControllerHardware() {
 
 // taskBaseController (Core 0 - 高優先級, 100Hz)
 void taskBaseController(void *pvParameters) {
+    // 確保硬體中斷 (Encoder, IMU) 註冊在 Core 0，避免被 Core 1 的 ROS UART 通訊干擾導致漏中斷
+    initBaseControllerHardware();
+
     TickType_t xLastWakeTime;
     const TickType_t xFrequency = pdMS_TO_TICKS(10); // 10ms = 100Hz
     xLastWakeTime = xTaskGetTickCount();
     
     unsigned long last_debug_print = 0;
+    float last_target_w = 0.0f; // 用於儲存上一個週期的平滑化目標角速度
 
     while(1) {
         // 1. 安全讀取下行指令
@@ -84,8 +86,13 @@ void taskBaseController(void *pvParameters) {
         // 3. 執行硬體即時控制
         // 3.1 超音波防撞更新與過濾
         reactiveBrake.updateSensors();
-        float safe_v = 0.0f, safe_w = 0.0f;
-        reactiveBrake.filter(target_v, target_w, safe_v, safe_w);
+        float safe_v = target_v;
+        float safe_w = target_w;
+
+        // 只有「前進」時才觸發前方超音波防撞 (避免倒車也被煞停，並防止死鎖)
+        if (target_v > 0.0f) {
+            reactiveBrake.filter(target_v, target_w, safe_v, safe_w);
+        }
 
         // 3.2 讀取 IMU 姿態並計算角速度補償
         bool has_mpu_data = false;
@@ -94,22 +101,44 @@ void taskBaseController(void *pvParameters) {
             has_mpu_data = true;
             mpuDataReady = false; // 清除中斷旗標
         }
-        float w_correction = angular_w_controller.update(safe_w, has_mpu_data);
+        
+        // 3.2 讀取 IMU 姿態並計算角速度補償 (改用平滑化後的當前預期角速度)
+        float raw_w_correction = angular_w_controller.update(last_target_w, has_mpu_data);
 
-        // 3.3 運動學解算 (套用緩坡與最高速限制，並設定馬達目標 RPM)
+        // 3.3 靜止防護 (Anti-Windup) 與限幅
+        float rpm_l = leftMotor.getCurrRPM();
+        float rpm_r = rightMotor.getCurrRPM();
+
+        if (abs(safe_v) < 0.001f && abs(safe_w) < 0.001f && 
+            abs(rpm_l) < 3.0f && abs(rpm_r) < 3.0f) {
+            // 車體準備靜止時，徹底清除累積誤差，防止馬達在停止時發出異音或亂抖
+            angular_w_controller.reset();
+            w_correction = 0.0f;
+            leftPID.reset();
+            rightPID.reset();
+        } else {
+            // 行進中，將補償量限制在安全範圍內 (-1.5 ~ +1.5 rad/s，因為左右輪物理差異較大，需放寬極限)
+            w_correction = constrain(raw_w_correction, -1.5f, 1.5f);
+        }
+
+        // 3.4 運動學解算 (套用緩坡與最高速限制，並設定馬達目標 RPM)
         MotionTelemetry telemetry = motionController.update(safe_v, safe_w, w_correction);
+        last_target_w = telemetry.current_w; // 紀錄本次平滑化後的目標角速度，供下個週期 IMU 比對使用
 
-        // 3.4 執行 PID 運算與馬達輸出
+        // 3.5 執行 PID 運算與馬達輸出
         leftPID.update();
         rightPID.update();
 
-        // 3.5 更新里程計 (Odometry)
-        odom.update(leftMotor.getCurrRPM(), rightMotor.getCurrRPM(), angular_w_controller.getActualW());
+        // 取得實際角速度，供 Odometry 與 ROS 使用
+        float correct_actual_w = angular_w_controller.getActualW();
+
+        // 3.6 更新里程計 (Odometry)
+        odom.update(leftMotor.getCurrRPM(), rightMotor.getCurrRPM(), correct_actual_w);
 
         // 4. 安全寫入上行遙測變數
         portENTER_CRITICAL(&mux);
         odom_x = odom.getX(); odom_y = odom.getY(); odom_theta = odom.getTheta();
-        actual_v = odom.getLinearV(); actual_w = angular_w_controller.getActualW();
+        actual_v = odom.getLinearV(); actual_w = correct_actual_w;
         sonar_left_dist = reactiveBrake.getLeftDistance(); sonar_right_dist = reactiveBrake.getRightDistance();
         portEXIT_CRITICAL(&mux);
 
@@ -117,8 +146,9 @@ void taskBaseController(void *pvParameters) {
         unsigned long now = millis();
         if (now - last_debug_print >= 500) {
             last_debug_print = now;
-            Serial.printf("[DEBUG] Pulses L: %ld, R: %ld | Odom X: %.3f, Y: %.3f, Theta: %.3f | V: %.3f | RPM L: %.1f, R: %.1f\n",
-                          global_debug_pulses_L, global_debug_pulses_R, odom_x, odom_y, odom_theta, actual_v, leftMotor.getCurrRPM(), rightMotor.getCurrRPM());
+            Serial.printf("[DEBUG] CMD(v:%.3f, w:%.3f) | Act(v:%.3f, w:%.3f) | RPM(L:%4.1f, R:%4.1f) | PWM(L:%4d, R:%4d) | w_corr:%.3f | Odom(x:%.3f, y:%.3f, th:%.3f)\n",
+                          target_v, target_w, actual_v, actual_w,
+                          leftMotor.getCurrRPM(), rightMotor.getCurrRPM(), leftPID.getLastPWM(), rightPID.getLastPWM(), w_correction, odom_x, odom_y, odom_theta);
         }
 
         // 精準延遲以確保 100Hz

@@ -21,9 +21,6 @@ void setup() {
     // 啟動 Serial2 提供給 micro-ROS 與 RPi 通訊 (提升至 460800 以支援 20Hz 以上的高頻發布)
     Serial2.begin(460800, SERIAL_8N1, 16, 17);
 
-    // 初始化所有底層硬體 (IMU、馬達、PID、超音波等)
-    initBaseControllerHardware();
-
     // 啟動 Base Controller (Core 0, 高優先級)
     xTaskCreatePinnedToCore(taskBaseController, "BaseCtrl", 8192, NULL, configMAX_PRIORITIES - 1, NULL, 0);
 

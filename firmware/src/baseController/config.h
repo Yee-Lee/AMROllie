@@ -44,20 +44,22 @@
 // 控制器與 PID 參數 (Control & PID)
 // ========================================
 // 馬達 PID 參數
-#define MOTOR_PID_KP 1.7f
-#define MOTOR_PID_KI 3.8f
-#define MOTOR_PID_KD 0.005f
-#define MOTOR_PID_LIMIT 50.0f
+#define MOTOR_PID_KP 1.2f
+#define MOTOR_PID_KI 0.4f
+#define MOTOR_PID_KD 0.05f
+#define MOTOR_PID_LIMIT 250.0f
 #define MOTOR_PID_HZ 100
-#define MOTOR_PID_OFFSET 90.0f
+#define MOTOR_PID_OFFSET 105.0f
 
 // 角速度 (IMU) PID 參數
-#define IMU_PID_KP 0.4f
-#define IMU_PID_KI 0.9f
-#define IMU_PID_KD 0.2f
+#define IMU_PID_KP 1.5f
+#define IMU_PID_KI 0.2f
+#define IMU_PID_KD 0.0f
 #define IMU_PID_HZ 50
 
 // 運動限制 (Motion Limits)
+// 將最高轉速限制在物理極限 (約 58 RPM) 之下，預留 20% 左右的動力給 IMU 進行轉向與直線補償
+// 45 RPM 大約等於 0.15 m/s 的極速
 #define MAX_RPM_NORMAL 80.0f
 
 // 反應式煞車距離設定 (Reactive Brake)

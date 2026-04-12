@@ -9,10 +9,6 @@
 
 static uint8_t next_ledc_channel = 0; 
 
-// 用於 Debug 的全域累加脈衝計數器
-long global_debug_pulses_L = 0;
-long global_debug_pulses_R = 0;
-
 Motor::Motor(int in1, int in2, int pwm, int encA, int encB, int cpr, bool reverse, int interval) 
     : _pinIN1(in1), _pinIN2(in2), _pinPWM(pwm),
       _pinEncA(encA), _pinEncB(encB),
@@ -54,23 +50,20 @@ void Motor::init() {
     attachInterruptArg(digitalPinToInterrupt(_pinEncA), isrWrapper, this, CHANGE);
 
     stop(); 
-    _lastUpdate = millis();
+    _lastUpdate = micros();
 }
 
 bool Motor::update() {
-    unsigned long now = millis();
-    if (now - _lastUpdate >= _updateInterval) {
+    unsigned long now = micros();
+    // _updateInterval 單位是 ms，轉為 us 進行比較
+    if (now - _lastUpdate >= _updateInterval * 1000) {
         // 使用原子操作讀取並清除計數值
         portENTER_CRITICAL(&_mux);
         long count = _pos;
         _pos = 0; 
         portEXIT_CRITICAL(&_mux);
         
-        // 攔截並累加原始脈衝 (Channel 0 為左輪，1 為右輪)
-        if (_ledcChannel == 0) global_debug_pulses_L += count;
-        if (_ledcChannel == 1) global_debug_pulses_R += count;
-
-        float dt = (float)(now - _lastUpdate) / 1000.0f;
+        float dt = (float)(now - _lastUpdate) / 1000000.0f;
         // RPM 計算公式: (脈衝數 / 每圈脈衝數) / 時間(分)
         // 注意：因為是雙沿觸發，_cpr 應該定義為原本單沿 PPR * 2
         float rawRPM = ((float)count / (float)_cpr) / dt * 60.0f;
