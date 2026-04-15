@@ -1,0 +1,357 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ollie ROS2 Remote</title>
+    <!-- 實戰時請下載此檔案放至同目錄，改為 src="./roslib.min.js" 實現離線遙控 -->
+    <script src="https://cdn.jsdelivr.net/npm/roslib@1/build/roslib.min.js"></script>
+    <style>
+        :root {
+            --bg: #0a0a0a;
+            --accent: #00ff88;
+            --line: #333;
+            --text: #eee;
+            --panel-bg: rgba(20, 20, 20, 0.8);
+        }
+
+        body { 
+            background-color: var(--bg); color: var(--text); 
+            font-family: 'Segoe UI', system-ui, sans-serif; 
+            margin: 0; height: 100vh; overflow: hidden;
+            user-select: none; touch-action: none; -webkit-user-select: none;
+            display: flex; flex-direction: column;
+        }
+
+        #header {
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid var(--line); padding: 8px 20px;
+            background: rgba(0,0,0,0.5); height: 45px; box-sizing: border-box;
+        }
+
+        /* 系統開關按鈕 */
+        #conn-btn {
+            padding: 5px 20px; font-size: 14px; font-weight: bold;
+            border: 1px solid var(--line); border-radius: 4px;
+            background: transparent; color: #888; cursor: pointer;
+            transition: all 0.2s;
+        }
+        #conn-btn.active {
+            color: var(--bg); border-color: var(--accent); background: var(--accent);
+            box-shadow: 0 0 10px rgba(0, 255, 136, 0.4);
+        }
+        #conn-btn:disabled {
+            opacity: 0.5; cursor: not-allowed;
+        }
+
+        #ros-indicator { font-size: 10px; margin-left: 8px; vertical-align: middle; }
+
+        #main-area {
+            flex: 1; display: flex; flex-direction: row;
+            justify-content: space-around; align-items: center;
+            padding: 10px; box-sizing: border-box;
+        }
+
+        .joy-container {
+            width: 180px; height: 180px; border-radius: 50%;
+            border: 2px solid var(--line); position: relative;
+            touch-action: none; background: rgba(255, 255, 255, 0.02);
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .joy-container.active {
+            border-color: var(--accent); box-shadow: 0 0 30px rgba(0, 255, 136, 0.3);
+        }
+
+        .joy-knob {
+            width: 70px; height: 70px; background: var(--accent);
+            border-radius: 50%; position: absolute; top: 55px; left: 55px;
+            box-shadow: 0 0 15px rgba(0, 255, 136, 0.3); transition: transform 0.05s linear;
+        }
+
+        #center-dashboard {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+            background: var(--panel-bg); padding: 10px; border-radius: 8px;
+            border: 1px solid var(--line); min-width: 220px;
+        }
+
+        .data-card {
+            display: flex; flex-direction: column; align-items: center;
+            background: rgba(0,0,0,0.4); padding: 4px; border-radius: 4px;
+            border: 2px solid transparent; box-sizing: border-box;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .label { font-size: 9px; color: var(--accent); margin-bottom: 2px; text-transform: uppercase;}
+        .value { font-size: 16px; font-family: monospace; color: var(--text); }
+
+        .btn-group { grid-column: 1 / -1; display: flex; gap: 6px; margin-top: 2px; }
+        .btn-group button {
+            flex: 1; padding: 8px; font-size: 11px; font-weight: bold;
+            border: 1px solid var(--line); border-radius: 4px;
+            background: transparent; color: var(--text); cursor: pointer;
+        }
+        .btn-active { background: #ff8800 !important; color: var(--bg) !important; border-color: #ff8800 !important; }
+
+        .sonar-ok { border-color: transparent; }
+        .sonar-warn { border-color: #28a745; box-shadow: 0 0 8px #28a74580; }
+        .sonar-danger { border-color: #ffc107; box-shadow: 0 0 8px #ffc10780; }
+
+        #portrait-warning {
+            display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--bg); z-index: 9999; color: var(--accent);
+            text-align: center; padding-top: 20%;
+        }
+
+        @media screen and (orientation: portrait) {
+            #main-area, #header { display: none; }
+            #portrait-warning { display: block; }
+        }
+    </style>
+</head>
+<body>
+    <div id="portrait-warning">請將裝置橫放操控 Ollie</div>
+
+    <div id="header">
+        <div style="font-weight:bold; letter-spacing:1px;">
+            OLLIE ROS 2 <span id="ros-indicator">🔴</span>
+        </div>
+        <!-- 狀態解耦：這顆按鈕單純做為 Ollie 操控權限的開關 (類似急停) -->
+        <button id="conn-btn" onclick="toggleOperation()" disabled>WAITING</button>
+    </div>
+
+    <div id="main-area">
+        <div id="joy-left" class="joy-container"><div id="knob-left" class="joy-knob"></div></div>
+        
+        <div id="center-dashboard">
+            <div class="data-card"><div class="label">Linear V</div><div id="val-v" class="value">0.00</div></div>
+            <div class="data-card"><div class="label">Angular W</div><div id="val-w" class="value">0.00</div></div>
+            <div class="data-card"><div class="label">L-Pwr (Est)</div><div id="pwr-l" class="value">0%</div></div>
+            <div class="data-card"><div class="label">R-Pwr (Est)</div><div id="pwr-r" class="value">0%</div></div>
+            <div id="card-sonar-l" class="data-card"><div class="label">L-Sonar</div><div id="sonar-l" class="value">--</div></div>
+            <div id="card-sonar-r" class="data-card"><div class="label">R-Sonar</div><div id="sonar-r" class="value">--</div></div>
+            <div class="data-card" style="grid-column: 1 / -1; flex-direction: row; justify-content: space-around;">
+                <div style="display: flex; flex-direction: column; align-items: center;"><div class="label">X (m)</div><div id="val-x" class="value">0.00</div></div>
+                <div style="display: flex; flex-direction: column; align-items: center;"><div class="label">Y (m)</div><div id="val-y" class="value">0.00</div></div>
+                <div style="display: flex; flex-direction: column; align-items: center;"><div class="label">Theta(deg)</div><div id="val-th" class="value">0.0</div></div>
+            </div>
+            <div class="btn-group">
+                <button id="test-btn" onclick="toggleMotionTest()">Test: OFF</button>
+                <button id="rst-btn" onclick="resetOdom()">Reset Pose</button>
+            </div>
+        </div>
+
+        <div id="joy-right" class="joy-container"><div id="knob-right" class="joy-knob"></div></div>
+    </div>
+
+    <script>
+        const MAX_LINEAR_VEL = 0.27;  
+        const MAX_ANGULAR_VEL = 2.7;  
+        
+        let ros = null;
+        let cmdVelTopic = null;
+        let isOperating = false; // Ollie 操控權限開關
+        
+        let currentV_ratio = 0; 
+        let currentW_ratio = 0;
+        const maxDist = 55; 
+
+        // --- 發布頻率優化機制 ---
+        let lastPublishTime = 0;
+        let heartbeatInterval = null;
+
+        function updateSonarStatus(dist_cm, cardId, valId) {
+            const card = document.getElementById(cardId);
+            const valEl = document.getElementById(valId);
+            if (!card || !valEl) return;
+            
+            valEl.innerText = dist_cm > 400 ? "---" : dist_cm.toFixed(1);
+            let newClass = 'data-card ';
+            if (dist_cm < 18) newClass += 'sonar-danger';
+            else if (dist_cm < 35) newClass += 'sonar-warn';
+            else newClass += 'sonar-ok';
+            card.className = newClass;
+        }
+
+        function connectROS() {
+            const rpiIp = window.location.hostname || 'localhost';
+            const indicator = document.getElementById('ros-indicator');
+            const opBtn = document.getElementById('conn-btn');
+            
+            try {
+                ros = new ROSLIB.Ros({ url : `ws://${rpiIp}:9090` });
+
+                ros.on('connection', () => {
+                    indicator.innerText = "🟢";
+                    opBtn.disabled = false;
+                    opBtn.innerText = "OFF";
+                    opBtn.classList.remove('active');
+                    isOperating = false;
+                    
+                    cmdVelTopic = new ROSLIB.Topic({
+                        ros : ros, name : '/cmd_vel', messageType : 'geometry_msgs/msg/Twist'
+                    });
+
+                    // 訂閱 Odom 與 Sonar ...
+                    new ROSLIB.Topic({ ros: ros, name: '/odom', messageType: 'nav_msgs/msg/Odometry' })
+                        .subscribe(msg => {
+                            document.getElementById('val-x').innerText = msg.pose.pose.position.x.toFixed(2);
+                            document.getElementById('val-y').innerText = msg.pose.pose.position.y.toFixed(2);
+                            const q = msg.pose.pose.orientation;
+                            const yaw = Math.atan2(2*(q.w*q.z + q.x*q.y), 1 - 2*(q.y*q.y + q.z*q.z));
+                            document.getElementById('val-th').innerText = (yaw * 180 / Math.PI).toFixed(1);
+                        });
+
+                    new ROSLIB.Topic({ ros: ros, name: '/sonar/left', messageType: 'sensor_msgs/msg/Range' })
+                        .subscribe(msg => updateSonarStatus(msg.range * 100, 'card-sonar-l', 'sonar-l'));
+
+                    new ROSLIB.Topic({ ros: ros, name: '/sonar/right', messageType: 'sensor_msgs/msg/Range' })
+                        .subscribe(msg => updateSonarStatus(msg.range * 100, 'card-sonar-r', 'sonar-r'));
+                });
+
+                ros.on('error', () => {
+                    indicator.innerText = "🔴";
+                    opBtn.disabled = true; opBtn.innerText = "ERROR";
+                });
+
+                ros.on('close', () => {
+                    indicator.innerText = "⚪";
+                    opBtn.disabled = true; opBtn.innerText = "DISCONNECT";
+                    isOperating = false; opBtn.classList.remove('active');
+                });
+            } catch (e) {
+                console.error("ROSLib Init Error:", e);
+            }
+        }
+
+        // --- 系統操控權限切換 ---
+        function toggleOperation() {
+            isOperating = !isOperating;
+            const btn = document.getElementById('conn-btn');
+            if (isOperating) {
+                btn.innerText = "ON";
+                btn.classList.add('active');
+                startHeartbeat();
+            } else {
+                btn.innerText = "OFF";
+                btn.classList.remove('active');
+                stopHeartbeat();
+                currentV_ratio = 0; currentW_ratio = 0; 
+                updateUI(); 
+                publishTwist(0, 0); // 相當於你原本寫的 stopMotors
+            }
+        }
+
+        // --- 優化後的發布邏輯 ---
+        function publishTwist(v, w) {
+            if (!isOperating || !cmdVelTopic) return;
+            // 縮短小數位數，減小 JSON 封包體積，加快 RPI3B 處理速度
+            const twist = new ROSLIB.Message({
+                linear : { x : parseFloat(v.toFixed(3)), y : 0.0, z : 0.0 },
+                angular : { x : 0.0, y : 0.0, z : parseFloat(w.toFixed(3)) }
+            });
+            cmdVelTopic.publish(twist);
+            lastPublishTime = Date.now();
+        }
+
+        // 心跳機制：即使不動搖桿，也定時發送數值保持連線
+        function startHeartbeat() {
+            if (heartbeatInterval) clearInterval(heartbeatInterval);
+            heartbeatInterval = setInterval(() => {
+                const now = Date.now();
+                // 如果距離上次發布已經超過 200ms (5Hz)，才發送心跳
+                if (now - lastPublishTime >= 200) {
+                    publishTwist(currentV_ratio * MAX_LINEAR_VEL, currentW_ratio * MAX_ANGULAR_VEL);
+                }
+            }, 200); 
+        }
+
+        function stopHeartbeat() {
+            if (heartbeatInterval) clearInterval(heartbeatInterval);
+        }
+
+        function updateUI() {
+            const real_v = currentV_ratio * MAX_LINEAR_VEL;
+            const real_w = currentW_ratio * MAX_ANGULAR_VEL;
+            document.getElementById('val-v').innerText = real_v.toFixed(2);
+            document.getElementById('val-w').innerText = real_w.toFixed(2);
+            
+            let l = currentV_ratio - currentW_ratio;
+            let r = currentV_ratio + currentW_ratio;
+            let m = Math.max(1, Math.abs(l), Math.abs(r));
+            document.getElementById('pwr-l').innerText = Math.round((l/m)*100) + "%";
+            document.getElementById('pwr-r').innerText = Math.round((r/m)*100) + "%";
+        }
+
+        function initJoystick(zoneId, knobId, isLeftStick) {
+            const zone = document.getElementById(zoneId);
+            const knob = document.getElementById(knobId);
+            let pointerId = null;
+
+            zone.addEventListener('pointerdown', (e) => {
+                if (!isOperating) return;
+                pointerId = e.pointerId;
+                zone.setPointerCapture(pointerId);
+                zone.classList.add('active');
+                handleMove(e);
+            });
+
+            const handleMove = (e) => {
+                if (pointerId === null || e.pointerId !== pointerId) return;
+                const rect = zone.getBoundingClientRect();
+                const cx = rect.left + rect.width / 2;
+                const cy = rect.top + rect.height / 2;
+                
+                let dx = e.clientX - cx;
+                let dy = e.clientY - cy;
+
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                if (dist > maxDist) { dx *= maxDist/dist; dy *= maxDist/dist; }
+
+                knob.style.transform = `translate(${dx}px, ${dy}px)`;
+
+                if (isLeftStick) currentV_ratio = -(dy / maxDist);
+                else currentW_ratio = -(dx / maxDist);
+                
+                updateUI();
+
+                // 節流閥 (Throttle)：如果跟上次發布時間差超過 50ms (20Hz)，立刻發布
+                // 這能確保搖桿「滑順的軌跡」能即時送到，又不會塞爆網路
+                if (Date.now() - lastPublishTime > 50) {
+                    publishTwist(currentV_ratio * MAX_LINEAR_VEL, currentW_ratio * MAX_ANGULAR_VEL);
+                }
+            };
+
+            zone.addEventListener('pointermove', handleMove);
+
+            const reset = (e) => {
+                if (e.pointerId !== pointerId) return;
+                pointerId = null;
+                zone.classList.remove('active');
+                knob.style.transform = `translate(0px, 0px)`;
+                if (isLeftStick) currentV_ratio = 0; else currentW_ratio = 0;
+                updateUI();
+                publishTwist(0, 0); // 放開搖桿瞬間，無條件立刻送出煞車指令
+            };
+
+            zone.addEventListener('pointerup', reset);
+            zone.addEventListener('pointercancel', reset);
+        }
+
+        initJoystick('joy-left', 'knob-left', true);
+        initJoystick('joy-right', 'knob-right', false);
+
+        connectROS();
+
+        let isMotionTest = false;
+        function toggleMotionTest() {
+            isMotionTest = !isMotionTest;
+            const btn = document.getElementById('test-btn');
+            btn.innerText = isMotionTest ? "Test: ON" : "Test: OFF";
+            btn.classList.toggle('btn-active', isMotionTest);
+        }
+
+        function resetOdom() { alert("預留功能：可綁定 ROS 2 Service 進行姿態重置。"); }
+    </script>
+</body>
+</html>
