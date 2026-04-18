@@ -4,6 +4,7 @@
 build/
 install/
 log/
+bags/
 
 # ==============================
 # Python / C++ Caches
