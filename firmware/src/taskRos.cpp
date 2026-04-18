@@ -78,9 +78,9 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
         (void)rcl_publish(&pub_odom, &msg_odom, NULL);
 
         // 發布超音波資料
-        msg_sonar_left.range = s_left;
+        msg_sonar_left.range = s_left / 100.0f; // 單位轉換：公分 (cm) 轉為公尺 (m)
         (void)rcl_publish(&pub_sonar_left, &msg_sonar_left, NULL);
-        msg_sonar_right.range = s_right;
+        msg_sonar_right.range = s_right / 100.0f; // 單位轉換：公分 (cm) 轉為公尺 (m)
         (void)rcl_publish(&pub_sonar_right, &msg_sonar_right, NULL);
     }
 }
@@ -133,11 +133,19 @@ void taskROS(void *pvParameters) {
         ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, Range), "sonar/right");
 
     // 設定超音波訊息的固定參數 (不隨時間改變的屬性)
+    msg_sonar_left.header.frame_id.data = (char*)"left_ultrasonic_link";
+    msg_sonar_left.header.frame_id.size = strlen("left_ultrasonic_link");
+    msg_sonar_left.header.frame_id.capacity = msg_sonar_left.header.frame_id.size + 1;
     msg_sonar_left.radiation_type = sensor_msgs__msg__Range__ULTRASOUND;
+    msg_sonar_left.field_of_view = 0.26f; // 擴散角約 15 度 (0.26 rad)，讓 Foxglove 可以畫出扇形
     msg_sonar_left.min_range = 0.02f; // 2cm
     msg_sonar_left.max_range = 4.00f; // 400cm
     
+    msg_sonar_right.header.frame_id.data = (char*)"right_ultrasonic_link";
+    msg_sonar_right.header.frame_id.size = strlen("right_ultrasonic_link");
+    msg_sonar_right.header.frame_id.capacity = msg_sonar_right.header.frame_id.size + 1;
     msg_sonar_right.radiation_type = sensor_msgs__msg__Range__ULTRASOUND;
+    msg_sonar_right.field_of_view = 0.26f;
     msg_sonar_right.min_range = 0.02f;
     msg_sonar_right.max_range = 4.00f;
 
