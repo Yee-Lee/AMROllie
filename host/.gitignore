@@ -25,3 +25,9 @@ __pycache__/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+
+# =========================
+#  3rd party library
+#  ========================
+ros2_ws/src/ldlidar_stl_ros2/
