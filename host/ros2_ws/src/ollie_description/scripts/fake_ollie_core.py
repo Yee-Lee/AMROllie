@@ -2,6 +2,7 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
+from sensor_msgs.msg import Range
 from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import TransformStamped
 import math
@@ -13,6 +14,8 @@ class FakeOllieCore(Node):
         # 建立發布器
         self.joint_pub = self.create_publisher(JointState, 'joint_states', 10)
         self.tf_broadcaster = TransformBroadcaster(self)
+        self.left_ultrasonic_pub = self.create_publisher(Range, 'ultrasonic/left', 10)
+        self.right_ultrasonic_pub = self.create_publisher(Range, 'ultrasonic/right', 10)
         
         # Ollie 的狀態變數 (X, Y 座標、面向角度、輪胎轉角)
         self.x = 0.0
@@ -65,6 +68,27 @@ class FakeOllieCore(Node):
         t.transform.rotation.w = math.cos(self.theta / 2.0)
         
         self.tf_broadcaster.sendTransform(t)
+
+        # 4. 發布假超音波感測器資料
+        # 利用 self.theta 來產生平滑變化的假距離 (例如 0.5 ~ 1.5 公尺之間來回)
+        fake_dist_l = 1.0 + math.sin(self.theta * 2.0) * 0.5
+        fake_dist_r = 1.0 + math.cos(self.theta * 2.0) * 0.5
+
+        def create_range_msg(frame_id, distance):
+            msg = Range()
+            msg.header.stamp = now
+            msg.header.frame_id = frame_id
+            msg.radiation_type = Range.ULTRASOUND
+            msg.field_of_view = 0.52  # 錐角約 30 度 (0.52 弧度)
+            msg.min_range = 0.02      # 最小偵測距離 2cm
+            msg.max_range = 4.0       # 最大偵測距離 400cm
+            msg.range = distance
+            return msg
+
+        msg_left = create_range_msg('left_ultrasonic_link', fake_dist_l)
+        msg_right = create_range_msg('right_ultrasonic_link', fake_dist_r)
+        self.left_ultrasonic_pub.publish(msg_left)
+        self.right_ultrasonic_pub.publish(msg_right)
 
 def main(args=None):
     rclpy.init(args=args)
