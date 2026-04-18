@@ -3,99 +3,79 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Ollie Web Controller</title>
-    <script src="https://cdn.jsdelivr.net/npm/roslib@1/build/roslib.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
+    <title>Ollie AMR Dashboard</title>
     <style>
-        body {
-            background-color: #121212; color: #ffffff;
-            font-family: sans-serif; display: flex;
-            flex-direction: column; align-items: center;
-            justify-content: center; height: 100vh; margin: 0;
-            overflow: hidden; /* 防止手機瀏覽器滑動刷新 */
+        :root {
+            --bg: #0a0a0a;
+            --accent: #00ff88;
+            --line: #333;
+            --text: #eee;
+            --panel-bg: rgba(20, 20, 20, 0.8);
         }
-        #status { margin-bottom: 20px; font-weight: bold; color: #ff4444; }
-        #joystick-zone {
-            width: 300px; height: 300px;
-            background-color: #1e1e1e; border-radius: 20px;
-            position: relative; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+        }
+        h1 {
+            color: var(--accent);
+            letter-spacing: 2px;
+            margin-bottom: 40px;
+            text-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
+            text-align: center;
+            font-size: 28px;
+        }
+        .menu-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 80%;
+            max-width: 400px;
+        }
+        .menu-btn {
+            background: var(--panel-bg);
+            color: var(--text);
+            border: 1px solid var(--line);
+            padding: 20px;
+            font-size: 18px;
+            text-align: center;
+            text-decoration: none;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            cursor: pointer;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+        .menu-btn:hover {
+            border-color: var(--accent);
+            box-shadow: 0 0 15px rgba(0, 255, 136, 0.2);
+            color: var(--accent);
+            transform: translateY(-2px);
+        }
+        .menu-btn.disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            pointer-events: none;
         }
     </style>
 </head>
 <body>
-
-    <h2>Ollie Web Controller</h2>
-    <div id="status">連線狀態: 未連線</div>
-    <div id="joystick-zone"></div>
-
-    <script>
-        // 1. 連線到 ROS 2 WebSocket (請將 localhost 改成你 RPi 的 IP)
-        const ros = new ROSLIB.Ros({
-            url : 'ws://192.168.0.103:9090' 
-        });
-
-        const statusEl = document.getElementById('status');
-
-        ros.on('connection', function() {
-            statusEl.innerText = '連線狀態: 已連線 🟢';
-            statusEl.style.color = '#00C851';
-        });
-
-        ros.on('error', function(error) {
-            statusEl.innerText = '連線狀態: 錯誤 🔴';
-            statusEl.style.color = '#ff4444';
-        });
-
-        ros.on('close', function() {
-            statusEl.innerText = '連線狀態: 已斷開 ⚪';
-            statusEl.style.color = '#aaaaaa';
-        });
-
-        // 2. 設定要發布的 Topic (/cmd_vel)
-        const cmdVel = new ROSLIB.Topic({
-            ros : ros,
-            name : '/cmd_vel',
-            messageType : 'geometry_msgs/msg/Twist'
-        });
-
-        // 3. 初始化虛擬搖桿
-        const joystick = nipplejs.create({
-            zone: document.getElementById('joystick-zone'),
-            mode: 'static',
-            position: { left: '50%', top: '50%' },
-            color: '#00C851'
-        });
-
-        // 4. 監聽搖桿移動事件並發布 ROS 訊息
-        joystick.on('move', function (evt, data) {
-            // Nipple.js 提供的角度和力度
-            const distance = data.distance; // 0 到 50
-            const angle = data.angle.radian; // 0 到 2PI
-
-            // 將力道正規化 (最大速度設為 0.5 m/s)
-            const max_linear_vel = 0.5;
-            const max_angular_vel = 1.0;
-            const normalized_dist = distance / 50.0; 
-
-            // 計算前進速度與轉向速度 (簡單的三角函數轉換)
-            const linear_x = Math.sin(angle) * max_linear_vel * normalized_dist;
-            const angular_z = -Math.cos(angle) * max_angular_vel * normalized_dist;
-
-            const twist = new ROSLIB.Message({
-                linear : { x : linear_x, y : 0.0, z : 0.0 },
-                angular : { x : 0.0, y : 0.0, z : angular_z }
-            });
-            cmdVel.publish(twist);
-        });
-
-        // 5. 搖桿放開時，發送煞車指令 (全零)
-        joystick.on('end', function () {
-            const stopMsg = new ROSLIB.Message({
-                linear : { x : 0.0, y : 0.0, z : 0.0 },
-                angular : { x : 0.0, y : 0.0, z : 0.0 }
-            });
-            cmdVel.publish(stopMsg);
-        });
-    </script>
+    <h1>OLLIE AMR DASHBOARD</h1>
+    <div class="menu-container">
+        <a href="joystickPage.html" class="menu-btn"><span>🕹️</span> Remote Control</a>
+        <a href="#" class="menu-btn disabled"><span>🗺️</span> Navigation (WIP)</a>
+        <a href="#" class="menu-btn disabled"><span>⚙️</span> Settings</a>
+    </div>
 </body>
 </html>

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Ollie ROS2 Remote</title>
     <!-- 實戰時請下載此檔案放至同目錄，改為 src="./roslib.min.js" 實現離線遙控 -->
-    <script src="https://cdn.jsdelivr.net/npm/roslib@1/build/roslib.min.js"></script>
+    <script src="scripts/roslib.min.js"></script>
     <style>
         :root {
             --bg: #0a0a0a;
@@ -113,8 +113,11 @@
     <div id="portrait-warning">請將裝置橫放操控 Ollie</div>
 
     <div id="header">
-        <div style="font-weight:bold; letter-spacing:1px;">
-            OLLIE ROS 2 <span id="ros-indicator">🔴</span>
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <a href="index.html" style="color: var(--text); text-decoration: none; font-size: 20px;">🔙</a>
+            <div style="font-weight:bold; letter-spacing:1px;">
+                OLLIE ROS 2 <span id="ros-indicator">🔴</span>
+            </div>
         </div>
         <!-- 狀態解耦：這顆按鈕單純做為 Ollie 操控權限的開關 (類似急停) -->
         <button id="conn-btn" onclick="toggleOperation()" disabled>WAITING</button>
