@@ -146,9 +146,9 @@ void taskBaseController(void *pvParameters) {
         unsigned long now = millis();
         if (now - last_debug_print >= 500) {
             last_debug_print = now;
-            Serial.printf("[DEBUG] CMD(v:%.3f, w:%.3f) | Act(v:%.3f, w:%.3f) | RPM(L:%4.1f, R:%4.1f) | PWM(L:%4d, R:%4d) | w_corr:%.3f | Odom(x:%.3f, y:%.3f, th:%.3f)\n",
+            Serial.printf("[DEBUG] CMD(v:%.3f, w:%.3f) | Act(v:%.3f, w:%.3f) | RPM(L:%4.1f, R:%4.1f) | PWM(L:%4d, R:%4d) | w_corr:%.3f | Odom(x:%.3f, y:%.3f, th:%.3f) | Sonar(L:%.2f, R:%.2f)\n",
                           target_v, target_w, actual_v, actual_w,
-                          leftMotor.getCurrRPM(), rightMotor.getCurrRPM(), leftPID.getLastPWM(), rightPID.getLastPWM(), w_correction, odom_x, odom_y, odom_theta);
+                          leftMotor.getCurrRPM(), rightMotor.getCurrRPM(), leftPID.getLastPWM(), rightPID.getLastPWM(), w_correction, odom_x, odom_y, odom_theta, sonar_left_dist, sonar_right_dist);
         }
 
         // 精準延遲以確保 100Hz
