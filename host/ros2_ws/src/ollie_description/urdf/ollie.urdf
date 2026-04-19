@@ -4,7 +4,7 @@
   <link name="base_link">
     <visual>
       <geometry>
-        <box size="0.24 0.16 0.055"/>
+        <box size="0.26 0.16 0.055"/>
       </geometry>
       <material name="blue">
         <color rgba="0.2 0.2 0.8 1"/>
@@ -49,9 +49,9 @@
 
   <link name="base_laser">
     <visual>
-      <origin xyz="0 0 0.02" rpy="0 0 0"/>
+      <origin xyz="0 0 0.015" rpy="0 0 0"/>
       <geometry>
-        <cylinder radius="0.02" length="0.04"/>
+        <cylinder radius="0.02" length="0.02"/>
       </geometry>
       <material name="dark_grey">
         <color rgba="0.2 0.2 0.2 1"/>
@@ -59,14 +59,14 @@
     </visual>
   </link>
 
-  <joint name="left_wheel_joint" type="continuous">
+  <joint name="left_wheel_joint" type="fixed">
     <parent link="base_link"/>
     <child link="left_wheel"/>
     <origin xyz="0.025 0.068 -0.0395" rpy="0 0 0"/>
     <axis xyz="0 1 0"/>
   </joint>
 
-  <joint name="right_wheel_joint" type="continuous">
+  <joint name="right_wheel_joint" type="fixed">
     <parent link="base_link"/>
     <child link="right_wheel"/>
     <origin xyz="0.025 -0.068 -0.0395" rpy="0 0 0"/>
@@ -82,7 +82,7 @@
   <joint name="lidar_joint" type="fixed">
     <parent link="base_link"/>
     <child link="base_laser"/>
-    <origin xyz="0.05 0 0.0275" rpy="0 0 0"/>
+    <origin xyz="0.015 -0.005 0.0425" rpy="0 0 -0.0873"/>
   </joint>
 
   <link name="left_ultrasonic_link">
@@ -99,7 +99,7 @@
   <joint name="left_ultrasonic_joint" type="fixed">
     <parent link="base_link"/>
     <child link="left_ultrasonic_link"/>
-    <origin xyz="0.12 0.05 -0.0525" rpy="0 0 0"/>
+    <origin xyz="0.095 0.04 -0.0525" rpy="0 0 0.1745"/>
   </joint>
 
   <link name="right_ultrasonic_link">
@@ -116,8 +116,7 @@
   <joint name="right_ultrasonic_joint" type="fixed">
     <parent link="base_link"/>
     <child link="right_ultrasonic_link"/>
-    <origin xyz="0.12 -0.05 -0.0525" rpy="0 0 0"/>
+    <origin xyz="0.095 -0.04 -0.0525" rpy="0 0 -0.1745"/>
   </joint>
 
 </robot>
-
