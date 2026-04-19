@@ -61,6 +61,26 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
         float s_left = sonar_left_dist, s_right = sonar_right_dist;
         portEXIT_CRITICAL(&mux);
 
+        // 取得與 RPI3B (Agent) 同步的系統時間 (奈秒)
+        int64_t time_ns = rmw_uros_epoch_nanos();
+        int32_t sec = (int32_t)(time_ns / 1000000000);
+        uint32_t nanosec = (uint32_t)(time_ns % 1000000000);
+
+        // 每秒 (相當於 20 次 callback) 透過序列埠印出一次時間戳記狀態，確認是否同步
+        static int log_counter = 0;
+        if (log_counter++ >= 20) {
+            Serial.printf("[ROS] Sync: %s | Epoch Sec: %d\n", rmw_uros_epoch_synchronized() ? "YES" : "NO", sec);
+            log_counter = 0;
+        }
+
+        // 替所有的 Header 蓋上時間戳記
+        msg_odom.header.stamp.sec = sec;
+        msg_odom.header.stamp.nanosec = nanosec;
+        msg_sonar_left.header.stamp.sec = sec;
+        msg_sonar_left.header.stamp.nanosec = nanosec;
+        msg_sonar_right.header.stamp.sec = sec;
+        msg_sonar_right.header.stamp.nanosec = nanosec;
+
         // 1. 填入 Odom 位置與姿態 (將 Yaw 轉換為四元數)
         msg_odom.pose.pose.position.x = current_x;
         msg_odom.pose.pose.position.y = current_y;
@@ -95,8 +115,10 @@ void taskROS(void *pvParameters) {
 
     // 持續等待 micro-ROS Agent 連線 (超時 1000ms，每次間隔 500ms)
     while (rmw_uros_ping_agent(1000, 1) != RMW_RET_OK) {
+        Serial.println("[ROS] Waiting for micro-ROS Agent...");
         vTaskDelay(pdMS_TO_TICKS(500));
     }
+    Serial.println("[ROS] micro-ROS Agent connected!");
 
     // --- 設定 ROS_DOMAIN_ID 為 30 ---
     rcl_init_options_t init_options = rcl_get_zero_initialized_init_options();
@@ -106,6 +128,20 @@ void taskROS(void *pvParameters) {
     // 使用自訂的 options 建立 support，然後釋放 options 記憶體
     rclc_support_init_with_options(&support, 0, NULL, &init_options, &allocator);
     rcl_init_options_fini(&init_options);
+
+    // 成功建立 micro-ROS session 後，才嘗試同步時間 (最多嘗試 5 次，避免死鎖)
+    const int timeout_ms = 1000;
+    for (int i = 0; i < 5; i++) {
+        rmw_uros_sync_session(timeout_ms);
+        if (rmw_uros_epoch_synchronized()) {
+            Serial.println("[ROS] Time synchronized successfully!");
+            break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(100)); // 給系統一點喘息空間
+    }
+    if (!rmw_uros_epoch_synchronized()) {
+        Serial.println("[ROS] Time sync failed during init, will retry safely in loop.");
+    }
 
     rclc_node_init_default(&node, "base_controller_node", "", &support);
 
@@ -169,7 +205,16 @@ void taskROS(void *pvParameters) {
     rclc_executor_add_subscription(&executor, &sub_cmd_vel, &msg_cmd_vel, &cmd_vel_callback, ON_NEW_DATA);
     rclc_executor_add_service(&executor, &srv_reset_odom, &req_reset_odom, &res_reset_odom, reset_odom_callback);
     
+    unsigned long last_sync_try = 0;
     while(1) {
+        if (!rmw_uros_epoch_synchronized()) {
+            unsigned long now = millis();
+            if (now - last_sync_try > 1000) { // 加入冷卻時間：每秒最多重試一次，避免塞爆 UART 癱瘓 Agent
+                rmw_uros_sync_session(100);
+                last_sync_try = now;
+            }
+        }
+        
         // 執行 micro-ROS 事件迴圈
         rclc_executor_spin_some(&executor, RCL_MS_TO_NS(10));
         vTaskDelay(pdMS_TO_TICKS(1)); // 避免觸發 Task Watchdog
