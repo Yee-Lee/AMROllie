@@ -79,6 +79,9 @@
 firmware/
 ├── platformio.ini               # PlatformIO 專案與環境設定 (含 micro-ROS 依賴)
 ├── docs/                        # 專案文件 (README, 測試指南)
+│   ├── README.md                # 專案主文件 (本文件)
+│   ├── README.example.uart_test.md # ESP32 與 RPi UART 純硬體雙向通訊測試說明
+│   └── ros_test_guide.md        # micro-ROS UART 通訊與 Agent 連線測試指南
 └── src/
     ├── main.cpp                 # 程式進入點、任務建立
     ├── task.h                   # 跨核心共享變數與 Spinlock 宣告

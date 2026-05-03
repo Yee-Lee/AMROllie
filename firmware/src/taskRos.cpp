@@ -35,6 +35,10 @@ std_srvs__srv__Trigger_Response res_reset_odom;
 // 接收上位機速度指令
 void cmd_vel_callback(const void * msgin) {
     const geometry_msgs__msg__Twist * msg = (const geometry_msgs__msg__Twist *)msgin;
+
+    // [DEBUG] 印出收到的指令，確認 Callback 確實被觸發
+    Serial.printf("[ROS-CB] Received cmd_vel: v=%.3f, w=%.3f\n", msg->linear.x, msg->angular.z);
+
     portENTER_CRITICAL(&mux);
     cmd_target_v = msg->linear.x;
     cmd_target_w = msg->angular.z;
@@ -146,7 +150,7 @@ void taskROS(void *pvParameters) {
     rclc_node_init_default(&node, "base_controller_node", "", &support);
 
     // --- 初始化 Publisher: /odom ---
-    rclc_publisher_init_default(
+    rclc_publisher_init_best_effort(
         &pub_odom, &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(nav_msgs, msg, Odometry), "odom");
 
@@ -160,11 +164,11 @@ void taskROS(void *pvParameters) {
     msg_odom.child_frame_id.capacity = msg_odom.child_frame_id.size + 1;
 
     // --- 初始化 Publisher: /sonar/left 與 /sonar/right ---
-    rclc_publisher_init_default(
+    rclc_publisher_init_best_effort(
         &pub_sonar_left, &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, Range), "sonar/left");
         
-    rclc_publisher_init_default(
+    rclc_publisher_init_best_effort(
         &pub_sonar_right, &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, Range), "sonar/right");
 
@@ -186,7 +190,7 @@ void taskROS(void *pvParameters) {
     msg_sonar_right.max_range = 4.00f;
 
     // --- 初始化 Subscriber: /cmd_vel ---
-    rclc_subscription_init_default(
+    rclc_subscription_init_best_effort(
         &sub_cmd_vel, &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Twist), "cmd_vel");
 
