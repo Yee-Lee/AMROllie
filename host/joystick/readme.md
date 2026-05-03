@@ -58,7 +58,7 @@ sudo apt install ros-humble-joy-linux ros-humble-teleop-twist-joy
 
     # 線速度設定 (Linear)
     axis_linear:
-      x: 2                       # 左搖桿上下 (Axis 2)
+      x: 1                       # 左搖桿上下 (Axis 1)
     scale_linear:
       x: 0.5                     # 最大線速度 0.5 m/s
 
