@@ -21,6 +21,9 @@
 - **RPI3B 環境**：直接將手把透過 USB 線插入樹莓派即可。
 
 ### 2.2 藍牙無線配對 (RPI3B 實機部署推薦)
+⚠️ **注意：系統預設將藍牙關閉，請在使用前先將其開啟。**
+您可以直接執行提供的腳本 `./enable_bluetooth.sh`，或手動執行指令將其開啟（例如 `sudo rfkill unblock bluetooth` 與 `sudo systemctl start bluetooth`）。
+
 在實車部署時，為了達到真正的無線遙控，請依循以下步驟進行藍牙配對：
 1. **拔除手把的 USB 線**。
 2. 進入藍牙控制台：`bluetoothctl`

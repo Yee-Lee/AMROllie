@@ -2,6 +2,8 @@
 
 本目錄包含在上位機 (例如 Raspberry Pi 或 PC) 上運行 `micro-ROS Agent` 的相關腳本。透過此 Agent，可以將下位機 (ESP32) 透過 UART 發送的資料橋接至 ROS 2 (Humble) 系統中。
 
+> **💡 效能優化建議**：針對記憶體僅有 1GB 的 Raspberry Pi 3B，強烈建議採用 **「原生編譯為主，Docker 為輔」** 的雙軌策略。請參閱本文最後的 效能優化策略 說明。
+
 ## 1. 系統環境準備 (Ubuntu 22.04)
 
 如果您使用的是乾淨的 Ubuntu 22.04 環境，請先安裝 Docker 並抓取所需的映像檔。
@@ -80,3 +82,32 @@ docker pull microros/micro-ros-agent:humble
 > export ROS_DOMAIN_ID=30
 > ```
 > *(強烈建議將 `export ROS_DOMAIN_ID=30` 加到您的 `~/.bashrc` 中，避免每次開新終端機時遺漏。)*
+
+---
+
+## 4. 效能優化策略：原生編譯為主，Docker 為輔 (退路機制)
+
+Raspberry Pi 3B 資源極度有限 (1GB RAM)。Docker 引擎 (`dockerd` 與 `containerd`) 在背景常駐會吃掉 80MB ~ 150MB 的記憶體，且會嚴重拖慢開機速度 (在網路等待與 I/O 競爭下可達 1 分鐘以上)。
+
+為了解放效能，建議採用**「預設關閉 Docker，平常使用原生編譯 (Native Build) 版本的 Agent」**的策略。保留 Docker 映像檔僅作為不預期狀況下的「退路機制 (Fallback)」。
+
+### 4.1 平常狀態：徹底關閉並禁用 Docker
+
+執行以下指令停止 Docker 相關服務，並取消開機自動啟動：
+```bash
+sudo systemctl stop docker.service docker.socket containerd.service
+sudo systemctl disable docker.service docker.socket containerd.service
+```
+*設定完成後，Docker 佔用 CPU/RAM 皆為 0，開機延遲為 0 秒。*
+
+### 4.2 需要救火/除錯時：手動喚醒 Docker
+
+當原生環境出現問題，想要切回穩定的 Docker 容器環境進行交叉測試時，只需手動啟動服務：
+```bash
+# 1. 手動啟動 Docker 引擎 (僅當次開機有效)
+sudo systemctl start docker.service
+
+# 2. 執行 Docker 版的 Agent
+./run_docker.sh
+```
+*重開機後，Docker 服務又會自動回到未啟動的休眠狀態，不佔用任何資源。*
