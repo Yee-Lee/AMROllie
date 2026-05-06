@@ -8,4 +8,4 @@ docker run -it --rm \
     -e ROS_DOMAIN_ID=30 \
     -v /dev:/dev \
     microros/micro-ros-agent:humble \
-    serial --dev /dev/ollie_core -b 460800
+    serial --dev /dev/ollie_core -b 115200

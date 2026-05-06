@@ -2,7 +2,8 @@ import serial
 import time
 
 # 設定 Serial Port，將 timeout 稍微調短，避免 readline 卡住太久
-ser = serial.Serial('/dev/serial0', 115200, timeout=0.1)
+SERIAL_PORT = '/dev/ollie_core'
+ser = serial.Serial(SERIAL_PORT, 115200, timeout=0.1)
 ser.flush()
 
 print("Ollie 的 UART 雙向測試 (TX/RX) 已啟動...")
