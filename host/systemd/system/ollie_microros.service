@@ -1,0 +1,15 @@
+[Unit]
+Description=Ollie Micro-ROS Agent (ESP32 Bridge)
+After=network.target
+
+[Service]
+Type=simple
+User=yee
+Environment="ROS_DOMAIN_ID=30"
+Restart=always
+RestartSec=5
+# 啟動原生編譯的 micro-ROS agent，使用 udev 綁定的 /dev/ollie_core
+ExecStart=/bin/bash -c "source /opt/ros/humble/setup.bash && source /home/yee/micro_ros_ws/install/local_setup.bash && ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ollie_core -v4"
+
+[Install]
+WantedBy=multi-user.target

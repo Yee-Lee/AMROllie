@@ -1,0 +1,15 @@
+[Unit]
+Description=Ollie Robot State Publisher (URDF/TF)
+After=network.target
+
+[Service]
+Type=simple
+User=yee
+Environment="ROS_DOMAIN_ID=30"
+# 透過 bash -c 串聯環境變數 source 與啟動指令
+ExecStart=/bin/bash -c "source /opt/ros/humble/setup.bash && source /home/yee/workspace/AMROllie/install/setup.bash && ros2 launch ollie_description state_publisher.launch.py"
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
