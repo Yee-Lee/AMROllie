@@ -9,13 +9,13 @@
 在啟動任何軟體之前，必須先確保實體接線與系統權限設定正確。
 
 1. **硬體連接**：將 LD19 雷達透過隨附的 USB 轉 TTL 轉接板，插入樹莓派/電腦的 USB 孔。
-2. **確認裝置名稱**：通常系統會將其識別為 `/dev/ttyUSB0`。你可以透過以下指令檢查：
+2. **確認裝置名稱**：我們已經透過 `udev` 規則將其固定綁定為 `/dev/ollie-lidar`。你可以透過以下指令檢查：
    ```bash
-   ls /dev/ttyUSB*
+   ls -l /dev/ollie-lidar
    ```
-3. **賦予讀寫權限**：為了讓程式能讀取雷達數據，必須賦予該序列埠權限（每次重開機後若無設定 udev 規則，需重新執行）：
+3. **賦予讀寫權限**：設定 `udev` 規則時通常已包含 `MODE="0666"` 自動賦予權限。若仍有讀取權限不足的問題，可手動執行：
    ```bash
-   sudo chmod 777 /dev/ttyUSB0
+   sudo chmod 777 /dev/ollie-lidar
    ```
 
 ---
@@ -36,7 +36,37 @@ python3 test_lidar.py
 
 ---
 
-## 3. 啟動 LD19 ROS 2 節點
+## 3. 修正 Launch 檔通訊埠設定
+
+在啟動節點前，必須確保 Launch 檔案指定的雷達通訊埠與我們綁定的 `udev` 規則一致。
+
+**檢查並修改 Launch 檔案或參數檔**
+請先用以下指令查看 `ld19.launch.py` 的內容，看看它是怎麼定義 `port_name` 的：
+
+```bash
+cat ~/workspace/AMROllie/host/ros2_ws/src/ldlidar_stl_ros2/launch/ld19.launch.py
+```
+
+通常在 ROS 2 的 Python launch 檔案中，你會看到類似以下的程式碼片段（直接寫在 Launch 檔裡）：
+
+```python
+Node(
+    package='ldlidar_stl_ros2',
+    executable='ldlidar_stl_ros2_node',
+    name='LD19',
+    parameters=[
+        {'port_name': '/dev/ttyUSB0'},  # <- 需更改這裡
+        {'port_baudrate': 230400},
+        # ...
+    ]
+)
+```
+
+**解決辦法**：請使用 `nano` 或你習慣的編輯器打開該檔案，將 `'/dev/ttyUSB0'` 改為 `'/dev/ollie-lidar'`。
+
+---
+
+## 4. 啟動 LD19 ROS 2 節點
 
 確認硬體通訊無誤後，即可啟動 ROS 2 節點，讓雷達數據轉換為標準的 `/scan` 話題供系統使用。
 
@@ -54,7 +84,7 @@ ros2 launch ldlidar_stl_ros2 ld19.launch.py
 
 ---
 
-## 4. 補充說明：如何編譯 LD19 ROS 2 套件
+## 5. 補充說明：如何編譯 LD19 ROS 2 套件
 
 若你是初次建置環境，或需要從原始碼重新編譯 LD19 的驅動程式，請依循以下步驟：
 
@@ -62,7 +92,7 @@ ros2 launch ldlidar_stl_ros2 ld19.launch.py
 將官方原始碼 clone 到工作區的 `src` 目錄下：
 ```bash
 cd ~/workspace/AMROllie/host/ros2_ws/src
-git clone [https://github.com/ldrobotSensorTeam/ldlidar_stl_ros2.git](https://github.com/ldrobotSensorTeam/ldlidar_stl_ros2.git)
+git clone https://github.com/ldrobotSensorTeam/ldlidar_stl_ros2.git
 ```
 
 **2. 單獨編譯套件**

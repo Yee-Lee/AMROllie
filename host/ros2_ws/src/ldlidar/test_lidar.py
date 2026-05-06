@@ -1,7 +1,7 @@
 import serial
 import time
 
-PORT = '/dev/ttyUSB0' 
+PORT = '/dev/ollie-lidar' 
 BAUD_RATE = 230400
 
 try:

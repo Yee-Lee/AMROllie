@@ -105,7 +105,7 @@ net.ipv6.conf.lo.disable_ipv6 = 1
 經過上述優化，請確保以下我們 AMR 仰賴的核心功能 **依然保持開啟**：
 - **Bluetooth 服務** (`bluetooth.service`)：供 PS4 搖桿 (`joy_linux`) 配對與操作。
 - **Docker 服務** (`docker.service`)：供 micro-ROS-agent 運行。
-- **Systemd-udevd** (`systemd-udevd.service`)：供 USB TTL 與 LiDAR 綁定名稱 (`/dev/ollie_core`, `/dev/ollie_lidar`)。
+- **Systemd-udevd** (`systemd-udevd.service`)：供 USB TTL 與 LiDAR 綁定名稱 (`/dev/ollie_core`, `/dev/ollie-lidar`)。
 - **WiFi 網路** (透過 `netplan` 或 `NetworkManager`)：供 SSH 與 Foxglove 遠端監控。
 
 ## 階段 6：進階開機速度優化 (Systemd 瓶頸排除)
