@@ -70,6 +70,71 @@ check_service_masked "networkd-dispatcher.service"
 check_service_masked "snapd.service"
 check_service_masked "cloud-init.service"
 
+# 7. 系統即時資源使用狀況
+echo -e "\n[7] 📊 系統即時資源使用狀況"
+
+# CPU 負載
+LOAD=$(cat /proc/loadavg | awk '{print $1", "$2", "$3}')
+echo "  - 📈 CPU 負載 (1m, 5m, 15m): $LOAD"
+
+# 總行程數 (Running Tasks)
+TASKS=$(ps -e | wc -l)
+echo "  - 🔄 總行程數 (Tasks): $TASKS"
+
+# 記憶體使用狀態
+MEM_TOTAL=$(free -m | awk '/^Mem:/{print $2}')
+MEM_USED=$(free -m | awk '/^Mem:/{print $3}')
+echo "  - 🧠 實體記憶體 (RAM): ${MEM_USED}MB / ${MEM_TOTAL}MB"
+
+SWAP_TOTAL=$(free -m | awk '/^Swap:/{print $2}')
+SWAP_USED=$(free -m | awk '/^Swap:/{print $3}')
+echo "  - 🗄️  交換空間 (Swap/ZRAM): ${SWAP_USED}MB / ${SWAP_TOTAL}MB"
+
+# 系統硬碟空間
+DISK_USE=$(df -h / | awk 'NR==2 {print $5}')
+DISK_AVAIL=$(df -h / | awk 'NR==2 {print $4}')
+echo "  - 💾 系統硬碟空間 (Root): 已用 $DISK_USE, 剩餘 $DISK_AVAIL"
+
+# CPU 溫度 (適用於 Raspberry Pi 等 ARM 設備)
+if [ -f /sys/class/thermal/thermal_zone0/temp ]; then
+    TEMP=$(cat /sys/class/thermal/thermal_zone0/temp)
+    TEMP_C=$(awk "BEGIN {printf \"%.1f\", $TEMP/1000}")
+    echo "  - 🌡️  CPU 溫度: ${TEMP_C}°C"
+fi
+
+# 樹莓派降頻/電壓不足警告 (針對 Raspberry Pi)
+if command -v vcgencmd &> /dev/null; then
+    THROTTLED=$(vcgencmd get_throttled)
+    if [ "$THROTTLED" != "throttled=0x0" ]; then
+        echo "  - ⚠️  硬體警告: 偵測到降頻或電壓不足 ($THROTTLED)！請檢查電源供應器。"
+    else
+        echo "  - ⚡ 硬體狀態: 供電與頻率正常 (0x0)"
+    fi
+fi
+
+# 網路與 ROS 環境
+IP_ADDR=$(hostname -I | awk '{print $1}')
+echo "  - 🌐 區域網路 IP: ${IP_ADDR:-無連線}"
+echo "  - 🤖 ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-未設定}"
+
+echo -e "\n[8] 🐳 Docker 運行狀態"
+if systemctl is-active --quiet docker; then
+    DOCKER_RUNNING=$(docker ps --format "  - {{.Names}} ({{.Status}})")
+    if [ -z "$DOCKER_RUNNING" ]; then
+        echo "  - 目前無執行中的容器"
+    else
+        echo "$DOCKER_RUNNING"
+    fi
+else
+    echo "  - Docker 服務目前未啟動 (符合節能設定)"
+fi
+
+echo -e "\n[9] 🔥 資源消耗 Top 3 行程 (Process)"
+echo "  [記憶體佔用 Top 3]"
+ps -eo pid,user,%mem,comm --sort=-%mem | head -n 4 | awk 'NR>1 {printf "    PID:%-6s User:%-8s Mem:%-5s Cmd:%s\n", $1, $2, $3"%", $4}'
+echo "  [CPU 佔用 Top 3]"
+ps -eo pid,user,%cpu,comm --sort=-%cpu | head -n 4 | awk 'NR>1 {printf "    PID:%-6s User:%-8s CPU:%-5s Cmd:%s\n", $1, $2, $3"%", $4}'
+
 echo -e "\n========================================="
 echo "    🎉 檢查完成！請確認上述項目皆顯示 ✅    "
 echo "========================================="
