@@ -1,0 +1,17 @@
+[Unit]
+Description=Ollie LD19 LiDAR Driver
+After=network.target systemd-udevd.service
+Wants=systemd-udevd.service
+
+[Service]
+Type=simple
+User=yee
+Environment="ROS_DOMAIN_ID=30"
+# 確保 udev 載入硬體權限後才啟動
+ExecStart=/bin/bash -c "source /opt/ros/humble/setup.bash && source /home/yee/workspace/AMROllie/install/setup.bash && ros2 ld19 start"
+ExecStart=/bin/bash -c "source /opt/ros/humble/setup.bash && source /home/yee/workspace/AMROllie/host/ros2_ws/install/setup.bash && ros2 ld19 start"
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

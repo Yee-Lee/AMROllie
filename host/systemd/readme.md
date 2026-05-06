@@ -6,18 +6,29 @@
 
 Ollie 的大腦被拆分為三個獨立的背景服務，彼此解耦，確保最高穩定性：
 1. **[已完成]** `ollie_microros.service`：負責啟動 micro-ROS agent (推薦使用原生編譯版)，橋接下位機 ESP32。
-2. **[已完成]** `ollie_description.service`：負責發布機器人 URDF 模型與 TF 座標轉換。
+2. **[已完成]** `ollie_description.service`：啟動 `ollie_visual.launch.py`，負責發布 URDF 模型、TF 座標轉換，以及開啟 Foxglove Bridge (Port 8765)。
 3. **[已完成]** `ollie_lidar.service`：負責啟動 LD19 光達驅動。
 
 ---
 
 ## 🛠️ 部署步驟
 
-所有服務設定檔皆須放置於 `/etc/systemd/system/` 目錄下，且修改後需執行 `sudo systemctl daemon-reload` 重新載入。
+為了方便版控與修改，建議將設定檔維護在專案目錄 (`~/workspace/AMROllie/host/systemd/system/`) 中，再透過**軟連結 (Symbolic Link)** 指向 `/etc/systemd/system/`。
+這樣未來每次修改檔案內容後，就不需要重新複製，只要執行 `sudo systemctl daemon-reload` 即可。
+
+**建立軟連結的指令：**
+```bash
+sudo ln -s ~/workspace/AMROllie/host/systemd/system/ollie_microros.service /etc/systemd/system/
+sudo ln -s ~/workspace/AMROllie/host/systemd/system/ollie_description.service /etc/systemd/system/
+sudo ln -s ~/workspace/AMROllie/host/systemd/system/ollie_lidar.service /etc/systemd/system/
+
+# 建立完成後重新載入 systemd
+sudo systemctl daemon-reload
+```
 
 ### 步驟 1：部署 Micro-ROS 通訊橋樑 (已完成)
 
-**檔案路徑**：`sudo vi /etc/systemd/system/ollie_microros.service`
+**檔案路徑**：`~/workspace/AMROllie/host/systemd/system/ollie_microros.service`
 
 ```ini
 [Unit]
@@ -39,7 +50,7 @@ WantedBy=multi-user.target
 
 ### 步驟 2：部署 Ollie Description 機器人狀態發布 (已完成)
 
-**檔案路徑**：`sudo vi /etc/systemd/system/ollie_description.service`
+**檔案路徑**：`~/workspace/AMROllie/host/systemd/system/ollie_description.service`
 
 ```ini
 [Unit]
@@ -50,8 +61,8 @@ After=network.target
 Type=simple
 User=yee
 Environment="ROS_DOMAIN_ID=30"
-# 透過 bash -c 串聯環境變數 source 與啟動指令
-ExecStart=/bin/bash -c "source /opt/ros/humble/setup.bash && source /home/yee/workspace/AMROllie/install/setup.bash && ros2 launch ollie_description state_publisher.launch.py"
+# 透過 bash -c 串聯環境變數 source 與啟動指令 (包含 TF、Foxglove 橋接與實體連線)
+ExecStart=/bin/bash -c "source /opt/ros/humble/setup.bash && source /home/yee/workspace/AMROllie/host/ros2_ws/install/setup.bash && ros2 launch ollie_description ollie_visual.launch.py"
 Restart=on-failure
 RestartSec=3
 
@@ -61,7 +72,7 @@ WantedBy=multi-user.target
 
 ### 步驟 3：部署 LD19 光達驅動 (待完成)
 
-**檔案路徑**：`sudo vi /etc/systemd/system/ollie_lidar.service`
+**檔案路徑**：`~/workspace/AMROllie/host/systemd/system/ollie_lidar.service`
 
 ```ini
 [Unit]
@@ -74,7 +85,7 @@ Type=simple
 User=yee
 Environment="ROS_DOMAIN_ID=30"
 # 確保 udev 載入硬體權限後才啟動
-ExecStart=/bin/bash -c "source /opt/ros/humble/setup.bash && source /home/yee/workspace/AMROllie/install/setup.bash && ros2 ld19 start"
+ExecStart=/bin/bash -c "source /opt/ros/humble/setup.bash && source /home/yee/workspace/AMROllie/host/ros2_ws/install/setup.bash && ros2 ld19 start"
 Restart=on-failure
 RestartSec=5
 
