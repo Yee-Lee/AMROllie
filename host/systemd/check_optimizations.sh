@@ -55,7 +55,7 @@ echo -e "\n[6] 🗑️  不必要服務與套件狀態檢查"
 
 check_service_masked() {
     STATUS=$(systemctl is-enabled "$1" 2>/dev/null)
-    if [ "$STATUS" = "masked" ] || [ "$STATUS" = "Disabled" ] || [ -z "$STATUS" ] || echo "$STATUS" | grep -q "No such file"; then
+    if [ "$STATUS" = "masked" ] || [ "$STATUS" = "disabled" ] || [ -z "$STATUS" ] || echo "$STATUS" | grep -q "No such file"; then
         echo "✅ $1 已被正確遮蔽或移除"
     else
         echo "❌ 警告：$1 狀態為 $STATUS，建議將其 mask 或停用"
