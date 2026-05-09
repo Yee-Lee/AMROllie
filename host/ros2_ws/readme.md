@@ -59,8 +59,8 @@ sudo apt install ros-humble-ros-base -y
 # 【選項 B】開發用 PC/Mac 虛擬機 (包含 RViz 等圖形化工具)
 # sudo apt install ros-humble-desktop -y
 
-# 安裝 ROS 2 開發與編譯必備工具
-sudo apt install python3-colcon-common-extensions python3-rosdep -y
+# 安裝 ROS 2 開發與編譯必備工具 (包含 rosdep 與 vcstool)
+sudo apt install python3-colcon-common-extensions python3-rosdep python3-vcstool -y
 ```
 
 ### 步驟 5：設定環境變數
