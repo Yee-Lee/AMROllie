@@ -36,9 +36,6 @@ std_srvs__srv__Trigger_Response res_reset_odom;
 void cmd_vel_callback(const void * msgin) {
     const geometry_msgs__msg__Twist * msg = (const geometry_msgs__msg__Twist *)msgin;
 
-    // [DEBUG] 印出收到的指令，確認 Callback 確實被觸發
-    Serial.printf("[ROS-CB] Received cmd_vel: v=%.3f, w=%.3f\n", msg->linear.x, msg->angular.z);
-
     portENTER_CRITICAL(&mux);
     cmd_target_v = msg->linear.x;
     cmd_target_w = msg->angular.z;
