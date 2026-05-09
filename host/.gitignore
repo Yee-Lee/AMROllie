@@ -7,6 +7,8 @@ log/
 bags/
 ros2_ws/src/micro_ros_setup/
 ros2_ws/src/micro_ros_agent/
+ros2_ws/src/uros/
+ros2_ws/src/ros2.repos
 
 # ==============================
 # Python / C++ Caches
