@@ -9,6 +9,8 @@
 #include <nav_msgs/msg/odometry.h>
 #include <sensor_msgs/msg/range.h>
 #include <std_srvs/srv/trigger.h>
+#include <tf2_msgs/msg/tf_message.h>
+#include <geometry_msgs/msg/transform_stamped.h>
 
 // --- micro-ROS 相關實體 ---
 rclc_executor_t executor;
@@ -17,6 +19,7 @@ rcl_allocator_t allocator;
 rcl_node_t node;
 
 rcl_publisher_t pub_odom;
+rcl_publisher_t pub_tf;
 rcl_publisher_t pub_sonar_left;
 rcl_publisher_t pub_sonar_right;
 rcl_subscription_t sub_cmd_vel;
@@ -25,6 +28,8 @@ rcl_timer_t ros_timer;
 
 geometry_msgs__msg__Twist msg_cmd_vel;
 nav_msgs__msg__Odometry msg_odom;
+tf2_msgs__msg__TFMessage msg_tf;
+geometry_msgs__msg__TransformStamped msg_tf_stamped;
 sensor_msgs__msg__Range msg_sonar_left;
 sensor_msgs__msg__Range msg_sonar_right;
 std_srvs__srv__Trigger_Request req_reset_odom;
@@ -52,7 +57,7 @@ void reset_odom_callback(const void * req, void * res) {
     response->success = true;
 }
 
-// 定期發布 Odom 與 Sonar (20Hz)
+// 定期發布 Odom 與 Sonar (10Hz)
 void timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
     if (timer != NULL) {
         portENTER_CRITICAL(&mux);
@@ -67,9 +72,9 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
         int32_t sec = (int32_t)(time_ns / 1000000000);
         uint32_t nanosec = (uint32_t)(time_ns % 1000000000);
 
-        // 每秒 (相當於 20 次 callback) 透過序列埠印出一次時間戳記狀態，確認是否同步
+        // 每秒 (相當於 10 次 callback) 透過序列埠印出一次時間戳記狀態，確認是否同步
         static int log_counter = 0;
-        if (log_counter++ >= 20) {
+        if (log_counter++ >= 10) {
             Serial.printf("[ROS] Sync: %s | Epoch Sec: %d\n", rmw_uros_epoch_synchronized() ? "YES" : "NO", sec);
             log_counter = 0;
         }
@@ -81,6 +86,8 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
         msg_sonar_left.header.stamp.nanosec = nanosec;
         msg_sonar_right.header.stamp.sec = sec;
         msg_sonar_right.header.stamp.nanosec = nanosec;
+        msg_tf_stamped.header.stamp.sec = sec;
+        msg_tf_stamped.header.stamp.nanosec = nanosec;
 
         // 1. 填入 Odom 位置與姿態 (將 Yaw 轉換為四元數)
         msg_odom.pose.pose.position.x = current_x;
@@ -97,6 +104,18 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
 
         // 發布 Odom
         (void)rcl_publish(&pub_odom, &msg_odom, NULL);
+
+        // 3. 填入 TF 變換
+        msg_tf_stamped.transform.translation.x = current_x;
+        msg_tf_stamped.transform.translation.y = current_y;
+        msg_tf_stamped.transform.translation.z = 0.0;
+        msg_tf_stamped.transform.rotation.x = 0.0;
+        msg_tf_stamped.transform.rotation.y = 0.0;
+        msg_tf_stamped.transform.rotation.z = sin(current_theta / 2.0f);
+        msg_tf_stamped.transform.rotation.w = cos(current_theta / 2.0f);
+
+        // 發布 TF
+        (void)rcl_publish(&pub_tf, &msg_tf, NULL);
 
         // 發布超音波資料
         msg_sonar_left.range = s_left / 100.0f; // 單位轉換：公分 (cm) 轉為公尺 (m)
@@ -149,7 +168,7 @@ void taskROS(void *pvParameters) {
     // --- 初始化 Publisher: /odom ---
     rclc_publisher_init_best_effort(
         &pub_odom, &node,
-        ROSIDL_GET_MSG_TYPE_SUPPORT(nav_msgs, msg, Odometry), "odom");
+        ROSIDL_GET_MSG_TYPE_SUPPORT(nav_msgs, msg, Odometry), "/odom");
 
     // 設定 Odom 訊息的靜態 Frame ID
     msg_odom.header.frame_id.data = (char*)"odom";
@@ -159,6 +178,24 @@ void taskROS(void *pvParameters) {
     msg_odom.child_frame_id.data = (char*)"base_link";
     msg_odom.child_frame_id.size = strlen("base_link");
     msg_odom.child_frame_id.capacity = msg_odom.child_frame_id.size + 1;
+
+    // --- 初始化 Publisher: /tf ---
+    rclc_publisher_init_default(
+        &pub_tf, &node,
+        ROSIDL_GET_MSG_TYPE_SUPPORT(tf2_msgs, msg, TFMessage), "/tf");
+
+    // 設定 TF 陣列與靜態 Frame ID
+    msg_tf.transforms.data = &msg_tf_stamped;
+    msg_tf.transforms.size = 1;
+    msg_tf.transforms.capacity = 1;
+
+    msg_tf_stamped.header.frame_id.data = (char*)"odom";
+    msg_tf_stamped.header.frame_id.size = strlen("odom");
+    msg_tf_stamped.header.frame_id.capacity = msg_tf_stamped.header.frame_id.size + 1;
+
+    msg_tf_stamped.child_frame_id.data = (char*)"base_link";
+    msg_tf_stamped.child_frame_id.size = strlen("base_link");
+    msg_tf_stamped.child_frame_id.capacity = msg_tf_stamped.child_frame_id.size + 1;
 
     // --- 初始化 Publisher: /sonar/left 與 /sonar/right ---
     rclc_publisher_init_best_effort(
@@ -196,8 +233,8 @@ void taskROS(void *pvParameters) {
         &srv_reset_odom, &node,
         ROSIDL_GET_SRV_TYPE_SUPPORT(std_srvs, srv, Trigger), "reset_odom");
 
-    // --- 初始化 Timer (20Hz = 50ms) ---
-    rclc_timer_init_default(&ros_timer, &support, RCL_MS_TO_NS(50), timer_callback);
+    // --- 初始化 Timer (10Hz = 100ms) - 避免 115200 baudrate 頻寬超載 ---
+    rclc_timer_init_default(&ros_timer, &support, RCL_MS_TO_NS(100), timer_callback);
 
     // --- 初始化 Executor ---
     // 參數 3 代表 Handles 數量: 包含 1 個 Timer, 1 個 Subscriber, 1 個 Service
@@ -208,12 +245,12 @@ void taskROS(void *pvParameters) {
     
     unsigned long last_sync_try = 0;
     while(1) {
-        if (!rmw_uros_epoch_synchronized()) {
-            unsigned long now = millis();
-            if (now - last_sync_try > 1000) { // 加入冷卻時間：每秒最多重試一次，避免塞爆 UART 癱瘓 Agent
-                rmw_uros_sync_session(100);
-                last_sync_try = now;
-            }
+        unsigned long now = millis();
+        // 無論是否已經對時過，每 5 秒都強制重新對時一次
+        // 解決 RPi 連上網路被 NTP 校時後，ESP32 仍發佈舊時間導致 TF 延遲的問題
+        if (now - last_sync_try > 5000) {
+            rmw_uros_sync_session(1000); // 增加 Timeout 到 1000ms，確保在傳輸高負載時不會因為漏封包而永遠失去同步
+            last_sync_try = now;
         }
         
         // 執行 micro-ROS 事件迴圈

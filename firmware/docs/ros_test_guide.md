@@ -1,23 +1,23 @@
-# ESP32 micro-ROS 通訊測試指南 (Raspberry Pi UART)
+# ESP32 micro-ROS 通訊測試指南 (Raspberry Pi via USB-TTL)
 
-本指南說明如何透過 UART 將 ESP32 (Base Controller) 連接至 Raspberry Pi 上的 micro-ROS Agent，並正確設定 ROS 2 環境進行通訊。
+本指南說明如何透過 USB-to-TTL 將 ESP32 (Base Controller) 連接至 Raspberry Pi 上的 micro-ROS Agent，並正確設定 ROS 2 環境進行通訊。
 
-## 1. 硬體接線 (UART 交錯連接)
+## 1. 硬體接線 (USB-to-TTL 轉接)
 
-請確保 ESP32 與 RPi 的腳位正確交錯且**必須共地**：
+請確保 ESP32 與 USB 轉接模組的腳位正確交錯，然後將 USB 端插入 RPi：
 
-| ESP32 Pin | 功能 | 對接 | Raspberry Pi Pin | 功能 |
+| ESP32 Pin | 功能 | 對接 | USB-to-TTL 模組 | 功能 |
 | :--- | :--- | :---: | :--- | :--- |
-| GPIO 16 | RX2 | <--> | Pin 8 (GPIO 14) | TXD (serial0) |
-| GPIO 17 | TX2 | <--> | Pin 10 (GPIO 15)| RXD (serial0) |
-| GND | GND | <--> | 任一 GND | GND |
+| GPIO 16 | RX2 | <--> | TXD | 發送端 |
+| GPIO 17 | TX2 | <--> | RXD | 接收端 |
+| GND | GND | <--> | GND | 共地 |
 
 ---
 
 ## 2. ESP32 韌體確認與燒錄
 
 請確保韌體已完成以下設定：
-1. **啟用 Serial2**：`main.cpp` 中初始化 `Serial2.begin(460800, SERIAL_8N1, 16, 17);`。
+1. **啟用 Serial2**：`main.cpp` 中初始化 `Serial2.begin(115200, SERIAL_8N1, 16, 17);`。
 2. **綁定傳輸層**：`taskRos.cpp` 中設定 `set_microros_serial_transports(Serial2);`。
 3. **指定 Domain ID**：`taskRos.cpp` 中設定 `rcl_init_options_set_domain_id(&init_options, 30);`。
 
@@ -40,7 +40,7 @@ docker run -it --rm \
   --net=host --privileged \
   -v /dev:/dev \
   -e ROS_DOMAIN_ID=30 \
-  microros/micro-ros-agent:humble serial --dev /dev/serial0 -b 460800
+  microros/micro-ros-agent:humble serial --dev /dev/ttyUSB0 -b 115200
 ```
 
 > **注意**：啟動後，若遲遲未見連線，請按一下 ESP32 板子上的 `EN/RST` 重置按鈕，直到看見綠色的 `session established` 訊息。
