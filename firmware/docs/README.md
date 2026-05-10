@@ -28,7 +28,7 @@
   - **頻率**：依 Executor 與 Timer 設定 (10Hz 發佈 Odometry 與超音波資料)。
   - **職責**：
     - 運行 `rclc_executor_spin_some(&executor, timeout)` 處理 ROS 2 收發。
-    - 執行 timer_callback (10Hz)：讀取 `taskBaseController` 算出的最新位姿資料與感測器距離，打包發布至 `/odom` (含四元數轉換)、`/sonar/left` 與 `/sonar/right`。
+    - 執行 timer_callback (10Hz)：讀取 `taskBaseController` 算出的最新位姿資料與感測器距離，打包發佈至 `/odom`、`/tf` (odom 指向 base_link 的動態變換)、`/sonar/left` 與 `/sonar/right`。
     - 執行訂閱回呼 (如 `/cmd_vel`)：接收上位機速度指令，並更新給 taskPID 的目標值。
     - 執行服務回呼 (如 `/reset_odom`)：接收上位機請求，重置底層里程計與 IMU 積分。
 - **中斷服務常式 (ISRs)**：
@@ -64,6 +64,7 @@
 3. **micro-ROS UART 通訊**：目前底層 Transport 綁定至預設 USB `Serial` (UART0)，可直接透過 USB 與 PC 進行快速 Agent 連線測試。若要實際安裝至車體與 RPi 對接，只需將程式碼改為 `Serial2` (TX=17/RX=16) 並透過硬體線路連接即可。
 4. **Topic 收發驗證**：
    - 成功發佈 `/odom` (並完成 Yaw 到四元數 Quaternion 轉換) 以及 `/sonar/left`, `/sonar/right`。
+   - 成功透過 `tf2_msgs` 發佈 `/tf`，提供 `odom` -> `base_link` 的動態座標變換，完美銜接 SLAM 與 Nav2。
    - 成功訂閱 `/cmd_vel`，可正確解析上位機下達的 `Twist` 速度指令。
    - 成功註冊 `/reset_odom` 服務，可隨時重置里程計與 IMU 積分。
 5. **安全機制**：實作了基礎的 `stopMotors()` 斷電保護。
@@ -89,4 +90,17 @@ firmware/
     ├── taskRos.cpp              # Core 1: micro-ROS 通訊代理節點
     └── baseController/          # 硬體抽象封裝模組 (IMU, PID, 運動學, 超音波等)
         └── config.h             # 腳位與參數設定
+
+## 7. 編譯與特殊相依套件 (Build & Dependencies)
+
+本專案使用了 `tf2_msgs` 來發佈 `/tf` 座標變換樹。由於 `micro_ros_platformio` 預設並未包含此套件，必須透過 `extra_packages` 機制手動引入才能通過編譯：
+
+1. **加入 extra_packages**：
+   專案根目錄下已配置 `extra_packages/` 資料夾，並包含 ROS 2 的 `tf2_msgs` 原始碼定義（已移除 `.git` 隱藏檔並加入 Git 追蹤）。
+2. **強制重新編譯 micro-ROS**：
+   當初次 Clone 本專案，或未來新增其他 `extra_packages` 後，必須先清除 micro-ROS 的編譯快取，讓底層 CMake 重新生成 Message Type Support：
+   ```bash
+   pio run --target clean_microros
+   pio run
+   ```
 ```
