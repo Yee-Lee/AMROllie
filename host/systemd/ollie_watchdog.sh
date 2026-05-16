@@ -30,6 +30,11 @@ restart_service() {
     local REASON=$1
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WATCHDOG] ERROR: ${REASON}. Restarting ${SERVICE_NAME}..." >> "$LOG_FILE"
     
+    # 記錄重啟前 Micro-ROS Agent 的最後幾行日誌，協助釐清是否為底層連線異常
+    echo "--- Micro-ROS Agent Log Before Restart ---" >> "$LOG_FILE"
+    journalctl -u "$SERVICE_NAME" -n 5 --no-pager >> "$LOG_FILE"
+    echo "------------------------------------------" >> "$LOG_FILE"
+
     systemctl restart "$SERVICE_NAME"
     
     if [ $? -eq 0 ]; then
