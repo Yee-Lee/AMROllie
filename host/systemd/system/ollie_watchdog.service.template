@@ -1,12 +1,16 @@
 [Unit]
-Description=Ollie Active Watchdog Service
-After=network.target ollie_microros.service
+Description=Ollie Python Watchdog Node
+After=ollie_microros.service
+Wants=ollie_microros.service
 
 [Service]
-Type=oneshot
-# 注意：此處需填寫您機器上的絕對路徑
-ExecStart=/bin/bash /home/<your_username>/workspace/AMROllie/host/systemd/ollie_watchdog.sh
-User=root
+Type=simple
+User=<your_username>
+Environment="ROS_DOMAIN_ID=30"
+Environment="PYTHONUNBUFFERED=1"
+ExecStart=/bin/bash -c "source /opt/ros/humble/setup.bash && /home/<your_username>/workspace/AMROllie/host/systemd/ollie_watchdog_node.py"
+Restart=always
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target

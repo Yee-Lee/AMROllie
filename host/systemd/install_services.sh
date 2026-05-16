@@ -45,7 +45,7 @@ echo "Template generation complete."
 echo "Proceeding to systemd registration (requires sudo)..."
 
 # 2. 註冊服務 (軟連結)
-SERVICES=("ollie_microros.service" "ollie_description.service" "ollie_lidar.service" "ollie_watchdog.service" "ollie_watchdog.timer")
+SERVICES=("ollie_microros.service" "ollie_description.service" "ollie_lidar.service" "ollie_watchdog.service")
 
 for S in "${SERVICES[@]}"; do
     if [ -f "$SYSTEMD_DIR/$S" ]; then
@@ -57,8 +57,8 @@ for S in "${SERVICES[@]}"; do
     fi
 done
 
-# 3. 賦予 Watchdog 腳本執行權限
-chmod +x "$SCRIPT_DIR/ollie_watchdog.sh"
+# 3. 賦予 Python Watchdog 腳本執行權限
+chmod +x "$SCRIPT_DIR/ollie_watchdog_node.py"
 
 # 4. Reload Systemd
 echo "Reloading systemd daemon..."
@@ -68,6 +68,6 @@ echo "----------------------------------"
 echo "✅ Installation successful!"
 echo "You can now enable and start the services. Example:"
 echo "  sudo systemctl enable --now ollie_microros.service"
-echo "  sudo systemctl enable --now ollie_watchdog.timer"
+echo "  sudo systemctl enable --now ollie_watchdog.service"
 echo ""
 echo "Run './ollie_status.sh' to check the status."

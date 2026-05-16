@@ -3,7 +3,7 @@
 # AMROllie System Status Checker
 
 SERVICES=("ollie_microros" "ollie_description" "ollie_lidar")
-TIMERS=("ollie_watchdog")
+GUARDS=("ollie_watchdog")
 
 echo "--- Ollie Core Services ---"
 for S in "${SERVICES[@]}"; do
@@ -18,11 +18,12 @@ done
 
 echo ""
 echo "--- Ollie System Guards ---"
-for T in "${TIMERS[@]}"; do
-    STATUS=$(systemctl is-active "$T.timer" 2>/dev/null)
+for G in "${GUARDS[@]}"; do
+    STATUS=$(systemctl is-active "$G.service" 2>/dev/null)
     case $STATUS in
-        active)   echo -e "🛡️ active   - $T (Watchdog Protection)" ;;
-        inactive) echo -e "⚪ inactive - $T (Protection Disabled)" ;;
-        *)        echo -e "❓ unknown  - $T ($STATUS)" ;;
+        active)   echo -e "🛡️ active   - $G (Watchdog Protection)" ;;
+        failed)   echo -e "🔴 failed   - $G" ;;
+        inactive) echo -e "⚪ inactive - $G (Protection Disabled)" ;;
+        *)        echo -e "❓ unknown  - $G ($STATUS)" ;;
     esac
 done
