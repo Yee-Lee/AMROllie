@@ -95,7 +95,7 @@ cp ollie_microros.service.template ollie_microros.service
 
 ### 2. 編輯路徑與權限
 打開您剛建立好的 `.service` 檔案，手動進行以下修改：
-*   **使用者名稱**：找到 `User=<your_username>`，將其替換為您目前的 Linux 帳號（例如 `User=yee`）。
+*   **使用者名稱**：找到 `User=<your_username>`，將其替換為您目前的 Linux 帳號（例如 `User=ollie`）。
 *   **絕對路徑**：找到 `ExecStart=` 內的 `/home/<your_username>/workspace/AMROllie/host/`，將其替換為專案在您機器上的真實絕對路徑。
 
 *(對於 `ollie_watchdog.service` 與 `ollie_watchdog.timer` 也需進行相同替換。)*
