@@ -52,3 +52,7 @@ GEMINI.md
 .windsurf/
 claude_desktop_config.json
 
+
+# Ignore generated systemd files
+systemd/system/*.service
+systemd/system/*.timer

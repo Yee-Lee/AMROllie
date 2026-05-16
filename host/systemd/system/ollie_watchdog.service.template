@@ -5,7 +5,7 @@ After=network.target ollie_microros.service
 [Service]
 Type=oneshot
 # 注意：此處需填寫您機器上的絕對路徑
-ExecStart=/bin/bash /home/<your_username>/Workspace/AMROllie/host/systemd/ollie_watchdog.sh
+ExecStart=/bin/bash /home/<your_username>/workspace/AMROllie/host/systemd/ollie_watchdog.sh
 User=root
 
 [Install]
