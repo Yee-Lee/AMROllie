@@ -74,7 +74,7 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
         // 每秒 (相當於 20 次 callback) 透過序列埠印出一次時間戳記狀態，確認是否同步
         static int log_counter = 0;
         if (log_counter++ >= 20) {
-            Serial.printf("[ROS] Sync: %s | Epoch Sec: %d\n", rmw_uros_epoch_synchronized() ? "YES" : "NO", sec);
+            // Serial.printf("[ROS] Sync: %s | Epoch Sec: %d\n", rmw_uros_epoch_synchronized() ? "YES" : "NO", sec);
             log_counter = 0;
         }
 
@@ -116,14 +116,14 @@ bool create_entities() {
 
     // --- 設定 ROS_DOMAIN_ID 為 30 ---
     rcl_init_options_t init_options = rcl_get_zero_initialized_init_options();
-    rcl_init_options_init(&init_options, allocator);
-    rcl_init_options_set_domain_id(&init_options, 30);
+    (void)rcl_init_options_init(&init_options, allocator);
+    (void)rcl_init_options_set_domain_id(&init_options, 30);
 
     // 使用自訂的 options 建立 support，然後釋放 options 記憶體
     if (rclc_support_init_with_options(&support, 0, NULL, &init_options, &allocator) != RCL_RET_OK) {
         return false;
     }
-    rcl_init_options_fini(&init_options);
+    (void)rcl_init_options_fini(&init_options);
 
     if (rclc_node_init_default(&node, "base_controller_node", "", &support) != RCL_RET_OK) return false;
 
@@ -177,6 +177,22 @@ bool create_entities() {
     return true;
 }
 
+// 銷毀 ROS 實體，釋放記憶體
+void destroy_entities() {
+    rmw_context_t * rmw_context = rcl_context_get_rmw_context(&support.context);
+    (void) rmw_uros_set_context_entity_destroy_session_timeout(rmw_context, 0);
+
+    (void) rcl_publisher_fini(&pub_odom, &node);
+    (void) rcl_publisher_fini(&pub_sonar_left, &node);
+    (void) rcl_publisher_fini(&pub_sonar_right, &node);
+    (void) rcl_subscription_fini(&sub_cmd_vel, &node);
+    (void) rcl_service_fini(&srv_reset_odom, &node);
+    (void) rcl_timer_fini(&ros_timer);
+    (void) rclc_executor_fini(&executor);
+    (void) rcl_node_fini(&node);
+    (void) rclc_support_fini(&support);
+}
+
 // 非阻塞 LED 更新邏輯
 void updateLED(AgentState state) {
     portENTER_CRITICAL(&mux);
@@ -204,6 +220,19 @@ void updateLED(AgentState state) {
             leds[0] = CRGB::Green;
             FastLED.setBrightness(100); // 調整至適當亮度避免過亮
         }
+    } else if (state == AGENT_LOSING) {
+        // 黃色閃爍 2Hz (懷疑斷線，Debounce 中)
+        if (millis() % 500 < 250) {
+            leds[0] = CRGB::Yellow;
+            FastLED.setBrightness(150);
+        } else {
+            leds[0] = CRGB::Black;
+            FastLED.setBrightness(0);
+        }
+    } else if (state == AGENT_DISCONNECTED) {
+        // 斷線清理瞬間 (通常極短)，顯示紅色常亮
+        leds[0] = CRGB::Red;
+        FastLED.setBrightness(100);
     }
     FastLED.show();
 }
@@ -221,27 +250,52 @@ void taskROS(void *pvParameters) {
 
     AgentState state = WAITING_AGENT;
     unsigned long last_sync_try = 0;
+    
+    // Ping 與逾時追蹤變數
+    unsigned long last_ping_time = millis();
+    unsigned long last_wait_log_time = millis();
+    unsigned long waiting_start_time = millis();
+    int ping_missed_count = 0;
 
     while(1) {
         switch (state) {
             case WAITING_AGENT:
-                // 狀態機：等待並檢查 Agent 連線 (Timeout = 100ms, 非阻塞)
-                if (rmw_uros_ping_agent(100, 1) == RMW_RET_OK) {
-                    Serial.println("[ROS] micro-ROS Agent found! Creating entities...");
-                    if (create_entities()) {
-                        Serial.println("[ROS] Entities created successfully.");
-                        state = AGENT_CONNECTED;
+                // 狀態機：等待並檢查 Agent 連線
+                
+                // 1. 每 5 秒列印一次 Waiting 提示與重啟倒數
+                if (millis() - last_wait_log_time > 5000) {
+                    last_wait_log_time = millis();
+                    unsigned long waited_seconds = (millis() - waiting_start_time) / 1000;
+                    Serial.printf("[ROS] Waiting for micro-ROS Agent for %lu seconds... (30s reset)\n", waited_seconds);
+                }
 
-                        // 嘗試初步時間同步
-                        for (int i = 0; i < 5; i++) {
-                            rmw_uros_sync_session(100);
-                            if (rmw_uros_epoch_synchronized()) break;
-                            vTaskDelay(pdMS_TO_TICKS(10));
+                // 2. Timeout 保護機制：如果等待超過 30 秒，自動重啟 ESP32
+                if (millis() - waiting_start_time > 30000) {
+                    Serial.println("[FATAL] Agent wait timeout (30 seconds). Rebooting ESP32...");
+                    delay(100); // 給 UART 緩衝區一點時間送出字串
+                    ESP.restart();
+                }
+
+                // 3. 低頻重試：每 3000ms 檢查一次連線
+                if (millis() - last_ping_time > 3000) {
+                    last_ping_time = millis();
+                    if (rmw_uros_ping_agent(100, 1) == RMW_RET_OK) {
+                        Serial.println("[ROS] micro-ROS Agent found! Creating entities...");
+                        if (create_entities()) {
+                            Serial.println("[ROS] Entities created successfully.");
+                            state = AGENT_CONNECTED;
+                            ping_missed_count = 0;
+
+                            // 嘗試初步時間同步
+                            for (int i = 0; i < 5; i++) {
+                                (void)rmw_uros_sync_session(100);
+                                if (rmw_uros_epoch_synchronized()) break;
+                                vTaskDelay(pdMS_TO_TICKS(10));
+                            }
+                        } else {
+                            Serial.println("[ROS] Failed to create entities. Retrying in next loop...");
+                            state = AGENT_DISCONNECTED; // 建立失敗，立刻進入清理狀態
                         }
-                    } else {
-                        Serial.println("[ROS] Failed to create entities. Retrying in next loop...");
-                        // 注意：如果實體建立失敗，將停留在 WAITING_AGENT 狀態，並在下一次迴圈重試。
-                        // (後續階段將在此處補充 destroy_entities 以確保記憶體不外洩)
                     }
                 }
                 break;
@@ -251,15 +305,63 @@ void taskROS(void *pvParameters) {
                 if (!rmw_uros_epoch_synchronized()) {
                     unsigned long now = millis();
                     if (now - last_sync_try > 1000) {
-                        rmw_uros_sync_session(10);
+                        (void)rmw_uros_sync_session(10);
                         last_sync_try = now;
                     }
                 }
 
                 // 執行 micro-ROS 事件迴圈
-                rclc_executor_spin_some(&executor, RCL_MS_TO_NS(10));
+                (void)rclc_executor_spin_some(&executor, RCL_MS_TO_NS(10));
 
-                // (後續階段將在此處補充 Agent 斷線檢查邏輯)
+                // 定期 Ping 檢查健康度 (每 1000ms 檢查一次)
+                if (millis() - last_ping_time > 1000) {
+                    last_ping_time = millis();
+                    if (rmw_uros_ping_agent(50, 1) != RMW_RET_OK) {
+                        Serial.println("[ROS] Ping failed! Entering AGENT_LOSING state...");
+                        state = AGENT_LOSING;
+                        ping_missed_count = 1;
+                        Serial.printf("[ROS] Disconnected for %d seconds...\n", ping_missed_count);
+                    }
+                }
+                break;
+
+            case AGENT_LOSING:
+                // 狀態機：懷疑斷線，進入 Debounce 檢查
+                // 盡量處理殘餘封包
+                (void)rclc_executor_spin_some(&executor, RCL_MS_TO_NS(10));
+
+                // 降低 Ping 頻率，每 1000ms 檢查一次，累積 5 次 (5秒)
+                if (millis() - last_ping_time > 1000) {
+                    last_ping_time = millis();
+                    if (rmw_uros_ping_agent(50, 1) == RMW_RET_OK) {
+                        Serial.println("[ROS] Ping recovered. Returning to AGENT_CONNECTED.");
+                        state = AGENT_CONNECTED;
+                        ping_missed_count = 0;
+                    } else {
+                        ping_missed_count++;
+                        Serial.printf("[ROS] Disconnected for %d seconds...\n", ping_missed_count);
+                        if (ping_missed_count >= 5) {
+                            Serial.println("[ROS] Connection definitively lost. Entering AGENT_DISCONNECTED.");
+                            state = AGENT_DISCONNECTED;
+                        }
+                    }
+                }
+                break;
+
+            case AGENT_DISCONNECTED:
+                // 狀態機：確認斷線，執行資源清理
+                Serial.println("[ROS] Destroying entities to free memory...");
+                destroy_entities();
+                
+                // (未來階段三：在此處觸發全域的軟體煞停，將速度指令歸零)
+                
+                Serial.println("[ROS] Cleanup complete. Returning to WAITING_AGENT.");
+                state = WAITING_AGENT;
+                
+                // 重置計時器，準備進入低頻等待與超時計算
+                last_ping_time = millis(); 
+                last_wait_log_time = millis();
+                waiting_start_time = millis();
                 break;
         }
 

@@ -71,11 +71,16 @@
    - 成功將 `taskROS` 從阻塞式等待 Agent 連線重構為非阻塞 Switch-Case 狀態機 (`WAITING_AGENT`, `AGENT_CONNECTED`)。
    - 整合 FastLED 驅動 WS2812B (Pin 2)，提供即時的視覺狀態回饋：藍色呼吸 (未連線)、綠色常亮 (連線中)、紅色急閃 (底層觸發超音波防撞危險區)。
    - **架構解耦**：將 `ReactiveBrake` 模組的煞車狀態透過共享變數 `status_emergency_brake` 安全地傳遞給 `taskROS`，確保即使車輛靜止時有障礙物靠近，也能正確觸發紅色急閃。
+7. **連線穩定度管理與 Debounce (階段二)**：
+   - 擴展為四狀態非阻塞管理 (`WAITING_AGENT`, `AGENT_CONNECTED`, `AGENT_LOSING`, `AGENT_DISCONNECTED`)。
+   - 實作 5 秒斷線容錯緩衝 (Debounce)，並在 `AGENT_LOSING` 狀態加入黃色閃爍警告燈。
+   - 實作 `destroy_entities` 確保斷線時乾淨釋放 ROS 資源。
+   - 於 `WAITING_AGENT` 狀態實作 Watchdog 機制：若等待 Agent 連線超過 30 秒，自動觸發 `ESP.restart()` 避免系統假死。
 
 ### 下一步實作 (Next Steps)
-1. **連線穩定度管理 (Ping & Debounce) (階段二)**：在非阻塞狀態下加入週期性 Ping 與斷線容錯計數器，避免網路雜訊造成頻繁重連，並實作乾淨的 ROS 資源釋放 (`destroy_entities`)。
-2. **速度指令逾時看門狗與零秒煞停 (階段三)**：確保斷線或軟體當機時能主動煞停車輛。
-3. **上位機 (Raspberry Pi) 整合**：開發 ROS 2 導航堆疊 (Nav2) 節點，結合 LiDAR 進行 SLAM 與路徑規劃。
+1. **速度指令逾時看門狗與零秒煞停 (階段三)**：確保在確定斷線 (`AGENT_DISCONNECTED`) 或軟體當機時能主動將目標速度歸零並煞停車輛。
+2. **上位機 (Raspberry Pi) 整合**：開發 ROS 2 導航堆疊 (Nav2) 節點，結合 LiDAR 進行 SLAM 與路徑規劃。
+3. **實車調適與參數最佳化**：使用實際載具微調 `config.h` 中的 `MOTOR_PID_KP/KI/KD` 參數，確保運動與防撞平順。
 
 ## 6. 專案目錄結構 (Directory Structure)
 

@@ -8,8 +8,10 @@
 #define NUM_LEDS 1
 
 enum AgentState {
-    WAITING_AGENT,
-    AGENT_CONNECTED
+    WAITING_AGENT,      // 等待連線 (低頻 Ping)
+    AGENT_CONNECTED,    // 正常連線中
+    AGENT_LOSING,       // 懷疑斷線 (高頻 Ping Debounce)
+    AGENT_DISCONNECTED  // 確認斷線，執行清理
 };
 
 // --- 3. 共享變數與執行緒安全 ---
