@@ -5,10 +5,10 @@ Wants=systemd-udevd.service
 
 [Service]
 Type=simple
-User=yee
+User=<your_username>
 Environment="ROS_DOMAIN_ID=30"
 # 確保 udev 載入硬體權限後才啟動
-ExecStart=/bin/bash -c "source /opt/ros/humble/setup.bash && source /home/yee/workspace/AMROllie/host/ros2_ws/install/setup.bash && ros2 launch ldlidar_stl_ros2 ld19.launch.py"
+ExecStart=/bin/bash -c "source /opt/ros/humble/setup.bash && source /home/<your_username>/workspace/AMROllie/host/ros2_ws/install/setup.bash && ros2 launch ldlidar_stl_ros2 ld19.launch.py"
 Restart=on-failure
 RestartSec=5
 

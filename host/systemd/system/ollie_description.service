@@ -4,10 +4,10 @@ After=network.target
 
 [Service]
 Type=simple
-User=yee
+User=<your_username>
 Environment="ROS_DOMAIN_ID=30"
 # 透過 bash -c 串聯環境變數 source 與啟動指令 (包含 TF、Foxglove 橋接與實體連線)
-ExecStart=/bin/bash -c "source /opt/ros/humble/setup.bash && source /home/yee/workspace/AMROllie/host/ros2_ws/install/setup.bash && ros2 launch ollie_description ollie_visual.launch.py"
+ExecStart=/bin/bash -c "source /opt/ros/humble/setup.bash && source /home/<your_username>/workspace/AMROllie/host/ros2_ws/install/setup.bash && ros2 launch ollie_description ollie_visual.launch.py"
 Restart=on-failure
 RestartSec=3
 
