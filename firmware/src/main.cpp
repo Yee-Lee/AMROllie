@@ -8,12 +8,16 @@ portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 volatile float cmd_target_v = 0.0;
 volatile float cmd_target_w = 0.0;
 volatile bool flag_reset_odom = false;
+volatile unsigned long last_cmd_vel_time = 0;
 
 // 3.1 上行遙測 (taskBaseController -> taskROS)
 volatile float odom_x = 0.0, odom_y = 0.0, odom_theta = 0.0;
 volatile float actual_v = 0.0, actual_w = 0.0;
 volatile float sonar_left_dist = 0.0, sonar_right_dist = 0.0;
 volatile bool status_emergency_brake = false;
+
+// 3.2 系統連線狀態
+volatile AgentState current_agent_state = WAITING_AGENT;
 
 // --- 主線程 ---
 void setup() {

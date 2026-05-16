@@ -68,12 +68,14 @@ void taskBaseController(void *pvParameters) {
     float last_target_w = 0.0f; // 用於儲存上一個週期的平滑化目標角速度
 
     while(1) {
-        // 1. 安全讀取下行指令
+        // 1. 安全讀取下行指令與連線狀態
         portENTER_CRITICAL(&mux);
         float target_v = cmd_target_v;
         float target_w = cmd_target_w;
         bool do_reset = flag_reset_odom;
         if (do_reset) flag_reset_odom = false; // 清除旗標
+        unsigned long cmd_time = last_cmd_vel_time;
+        AgentState agent_state = current_agent_state;
         portEXIT_CRITICAL(&mux);
 
         // 2. 處理重置請求
@@ -84,6 +86,16 @@ void taskBaseController(void *pvParameters) {
         }
 
         // 3. 執行硬體即時控制
+        // 3.0 系統安全防護：速度看門狗與零秒煞停
+        bool is_watchdog_timeout = (millis() - cmd_time > 500); // 500ms 沒收到新指令視為逾時
+        bool is_agent_disconnected = (agent_state != AGENT_CONNECTED); // 不在連線狀態
+        
+        if (is_watchdog_timeout || is_agent_disconnected) {
+            // 強制將目標速度歸零 (不論上位機下達什麼指令)
+            target_v = 0.0f;
+            target_w = 0.0f;
+        }
+
         // 3.1 超音波防撞更新與過濾
         reactiveBrake.updateSensors();
         float safe_v = target_v;
@@ -135,12 +147,11 @@ void taskBaseController(void *pvParameters) {
         // 3.6 更新里程計 (Odometry)
         odom.update(leftMotor.getCurrRPM(), rightMotor.getCurrRPM(), correct_actual_w);
 
-        // 4. 安全寫入上行遙測變數 (包含提供給 taskROS 使用的煞停狀態)
+        // 4. 安全寫入上行遙測變數
         portENTER_CRITICAL(&mux);
         odom_x = odom.getX(); odom_y = odom.getY(); odom_theta = odom.getTheta();
         actual_v = odom.getLinearV(); actual_w = correct_actual_w;
         sonar_left_dist = reactiveBrake.getLeftDistance(); sonar_right_dist = reactiveBrake.getRightDistance();
-        // 將底層的緊急煞停狀態同步到全域變數，供 taskROS 控制紅色急閃燈效
         status_emergency_brake = reactiveBrake.isBraking();
         portEXIT_CRITICAL(&mux);
 

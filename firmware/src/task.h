@@ -21,12 +21,16 @@ extern portMUX_TYPE mux;
 extern volatile float cmd_target_v;
 extern volatile float cmd_target_w;
 extern volatile bool flag_reset_odom;
+extern volatile unsigned long last_cmd_vel_time; // 速度指令最後接收時間
 
 // 3.1 上行遙測 (taskBaseController -> taskROS)
 extern volatile float odom_x, odom_y, odom_theta;
 extern volatile float actual_v, actual_w;
 extern volatile float sonar_left_dist, sonar_right_dist;
 extern volatile bool status_emergency_brake;
+
+// 3.2 系統連線狀態
+extern volatile AgentState current_agent_state;
 
 // --- 任務宣告 ---
 void initBaseControllerHardware();

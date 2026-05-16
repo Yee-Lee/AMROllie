@@ -43,6 +43,7 @@ void cmd_vel_callback(const void * msgin) {
     portENTER_CRITICAL(&mux);
     cmd_target_v = msg->linear.x;
     cmd_target_w = msg->angular.z;
+    last_cmd_vel_time = millis(); // 更新指令接收時間
     portEXIT_CRITICAL(&mux);
 }
 
@@ -248,7 +249,6 @@ void taskROS(void *pvParameters) {
     set_microros_serial_transports(Serial2);
     delay(2000); // 等待連線穩定
 
-    AgentState state = WAITING_AGENT;
     unsigned long last_sync_try = 0;
     
     // Ping 與逾時追蹤變數
@@ -258,7 +258,12 @@ void taskROS(void *pvParameters) {
     int ping_missed_count = 0;
 
     while(1) {
-        switch (state) {
+        // 安全讀取全域連線狀態
+        portENTER_CRITICAL(&mux);
+        AgentState local_state_copy = current_agent_state;
+        portEXIT_CRITICAL(&mux);
+
+        switch (local_state_copy) {
             case WAITING_AGENT:
                 // 狀態機：等待並檢查 Agent 連線
                 
@@ -283,7 +288,10 @@ void taskROS(void *pvParameters) {
                         Serial.println("[ROS] micro-ROS Agent found! Creating entities...");
                         if (create_entities()) {
                             Serial.println("[ROS] Entities created successfully.");
-                            state = AGENT_CONNECTED;
+                            portENTER_CRITICAL(&mux);
+                            current_agent_state = AGENT_CONNECTED;
+                            portEXIT_CRITICAL(&mux);
+                            local_state_copy = AGENT_CONNECTED;
                             ping_missed_count = 0;
 
                             // 嘗試初步時間同步
@@ -294,7 +302,10 @@ void taskROS(void *pvParameters) {
                             }
                         } else {
                             Serial.println("[ROS] Failed to create entities. Retrying in next loop...");
-                            state = AGENT_DISCONNECTED; // 建立失敗，立刻進入清理狀態
+                            portENTER_CRITICAL(&mux);
+                            current_agent_state = AGENT_DISCONNECTED; // 建立失敗，立刻進入清理狀態
+                            portEXIT_CRITICAL(&mux);
+                            local_state_copy = AGENT_DISCONNECTED;
                         }
                     }
                 }
@@ -318,7 +329,10 @@ void taskROS(void *pvParameters) {
                     last_ping_time = millis();
                     if (rmw_uros_ping_agent(50, 1) != RMW_RET_OK) {
                         Serial.println("[ROS] Ping failed! Entering AGENT_LOSING state...");
-                        state = AGENT_LOSING;
+                        portENTER_CRITICAL(&mux);
+                        current_agent_state = AGENT_LOSING;
+                        portEXIT_CRITICAL(&mux);
+                        local_state_copy = AGENT_LOSING;
                         ping_missed_count = 1;
                         Serial.printf("[ROS] Disconnected for %d seconds...\n", ping_missed_count);
                     }
@@ -335,14 +349,20 @@ void taskROS(void *pvParameters) {
                     last_ping_time = millis();
                     if (rmw_uros_ping_agent(50, 1) == RMW_RET_OK) {
                         Serial.println("[ROS] Ping recovered. Returning to AGENT_CONNECTED.");
-                        state = AGENT_CONNECTED;
+                        portENTER_CRITICAL(&mux);
+                        current_agent_state = AGENT_CONNECTED;
+                        portEXIT_CRITICAL(&mux);
+                        local_state_copy = AGENT_CONNECTED;
                         ping_missed_count = 0;
                     } else {
                         ping_missed_count++;
                         Serial.printf("[ROS] Disconnected for %d seconds...\n", ping_missed_count);
                         if (ping_missed_count >= 5) {
                             Serial.println("[ROS] Connection definitively lost. Entering AGENT_DISCONNECTED.");
-                            state = AGENT_DISCONNECTED;
+                            portENTER_CRITICAL(&mux);
+                            current_agent_state = AGENT_DISCONNECTED;
+                            portEXIT_CRITICAL(&mux);
+                            local_state_copy = AGENT_DISCONNECTED;
                         }
                     }
                 }
@@ -353,10 +373,17 @@ void taskROS(void *pvParameters) {
                 Serial.println("[ROS] Destroying entities to free memory...");
                 destroy_entities();
                 
-                // (未來階段三：在此處觸發全域的軟體煞停，將速度指令歸零)
+                // 零秒煞停 (第一層防護：斷線瞬間清除 ROS 端的速度快取)
+                portENTER_CRITICAL(&mux);
+                cmd_target_v = 0.0f;
+                cmd_target_w = 0.0f;
+                portEXIT_CRITICAL(&mux);
                 
                 Serial.println("[ROS] Cleanup complete. Returning to WAITING_AGENT.");
-                state = WAITING_AGENT;
+                portENTER_CRITICAL(&mux);
+                current_agent_state = WAITING_AGENT;
+                portEXIT_CRITICAL(&mux);
+                local_state_copy = WAITING_AGENT;
                 
                 // 重置計時器，準備進入低頻等待與超時計算
                 last_ping_time = millis(); 
@@ -366,7 +393,7 @@ void taskROS(void *pvParameters) {
         }
 
         // 每次迴圈結束前更新狀態指示燈，確保視覺回饋不延遲
-        updateLED(state);
+        updateLED(local_state_copy);
 
         vTaskDelay(pdMS_TO_TICKS(10)); // 讓出 CPU，避免觸發 Task Watchdog
     }

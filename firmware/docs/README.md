@@ -76,11 +76,14 @@
    - 實作 5 秒斷線容錯緩衝 (Debounce)，並在 `AGENT_LOSING` 狀態加入黃色閃爍警告燈。
    - 實作 `destroy_entities` 確保斷線時乾淨釋放 ROS 資源。
    - 於 `WAITING_AGENT` 狀態實作 Watchdog 機制：若等待 Agent 連線超過 30 秒，自動觸發 `ESP.restart()` 避免系統假死。
+8. **指令逾時看門狗與零秒煞停 (階段三)**：
+   - **通訊狀態監控**：將連線狀態提升為全域變數 `current_agent_state`。當系統進入 `AGENT_LOSING` 或是 `AGENT_DISCONNECTED` 時，底層控制會立刻切斷動力，觸發零秒煞停。
+   - **500ms 軟體看門狗**：在 `taskBaseController` 中加入計時器，若超過 500ms 未收到新的 `/cmd_vel` 指令（模擬上位機當機或網路延遲），將自動強制將目標速度歸零，避免暴衝。
+   - **架空測試與 PID 行為驗證**：完成了空載狀態下的速度解算與 PID 前饋補償測試，確認底層速度閉環控制的穩定性。
 
 ### 下一步實作 (Next Steps)
-1. **速度指令逾時看門狗與零秒煞停 (階段三)**：確保在確定斷線 (`AGENT_DISCONNECTED`) 或軟體當機時能主動將目標速度歸零並煞停車輛。
-2. **上位機 (Raspberry Pi) 整合**：開發 ROS 2 導航堆疊 (Nav2) 節點，結合 LiDAR 進行 SLAM 與路徑規劃。
-3. **實車調適與參數最佳化**：使用實際載具微調 `config.h` 中的 `MOTOR_PID_KP/KI/KD` 參數，確保運動與防撞平順。
+1. **上位機 (Raspberry Pi) 整合**：開發 ROS 2 導航堆疊 (Nav2) 節點，結合 LiDAR 進行 SLAM 與路徑規劃。
+2. **實車調適與參數最佳化**：使用實際載具落地測試，微調 `config.h` 中的 `MOTOR_PID_KP/KI/KD` 以及前饋參數，以克服真實地面的靜摩擦力並確保防撞平順。
 
 ## 6. 專案目錄結構 (Directory Structure)
 
