@@ -41,7 +41,7 @@ sudo docker run -it --rm \
   -v /dev:/dev \
   -e ROS_DOMAIN_ID=30 \
   microros/micro-ros-agent:humble \
-  serial --dev /dev/serial0 -b 460800 -v6
+  serial --dev /dev/serial0 -b 115200 -v6
 ```
 > 啟動後，按下 ESP32 的 **EN** 按鈕重啟，確認畫面出現綠色的連線建立日誌。
 

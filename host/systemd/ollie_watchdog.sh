@@ -48,14 +48,17 @@ if [ "$SERVICE_STATUS" != "active" ]; then
 fi
 
 # --- 檢查階段 2: 實際數據通訊 (深蹲) ---
-# 使用 timeout 3 秒嘗試讀取一筆資料
+# 使用 timeout 10 秒嘗試讀取一筆資料 (Pi 3B Discovery 較慢，給予更多寬限)
 # --once: 收到一筆後就退出
 # --no-arr: 減少輸出負擔
-timeout 3 ros2 topic echo /odom --once --no-arr > /dev/null 2>&1
+timeout 10 ros2 topic echo /odom --once --no-arr > /dev/null 2>&1
 EXIT_CODE=$?
 
 if [ $EXIT_CODE -ne 0 ]; then
-    restart_service "/odom timeout or no data (Exit: $EXIT_CODE), possible dead-lock"
+    # 失敗時記錄當時的系統負載，幫助判斷是死鎖還是資源不足
+    LOAD=$(cat /proc/loadavg)
+    MEM=$(free -m | awk '/^Mem:/{print $3}')
+    restart_service "/odom timeout or no data (Exit: $EXIT_CODE, Load: $LOAD, MemUsed: ${MEM}MB), possible dead-lock"
     exit 0
 fi
 
