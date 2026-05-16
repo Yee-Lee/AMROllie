@@ -48,17 +48,32 @@ if [ "$SERVICE_STATUS" != "active" ]; then
 fi
 
 # --- 檢查階段 2: 實際數據通訊 (深蹲) ---
-# 使用 timeout 10 秒嘗試讀取一筆資料 (Pi 3B Discovery 較慢，給予更多寬限)
+# 使用 timeout 20 秒嘗試讀取一筆資料 (Pi 3B Discovery 較慢，且系統負載高時需要更多時間)
+# 我們先檢查 topic 是否存在於列表中，這比 echo 輕量一點點
+if ! ros2 topic list | grep -q "/odom"; then
+    LOAD=$(cat /proc/loadavg)
+    restart_service "/odom topic not found in list (Load: $LOAD), Agent might be struggling."
+    exit 0
+fi
+
+# 若 topic 存在，則嘗試讀取一筆真實數據
 # --once: 收到一筆後就退出
 # --no-arr: 減少輸出負擔
-timeout 10 ros2 topic echo /odom --once --no-arr > /dev/null 2>&1
+timeout 20 ros2 topic echo /odom --once --no-arr > /dev/null 2>&1
 EXIT_CODE=$?
+
+if [ $EXIT_CODE -ne 0 ]; then
+    # 第一次失敗後，給予 5 秒寬限期再試一次，避免短暫的 Discovery 延遲
+    sleep 5
+    timeout 15 ros2 topic echo /odom --once --no-arr > /dev/null 2>&1
+    EXIT_CODE=$?
+fi
 
 if [ $EXIT_CODE -ne 0 ]; then
     # 失敗時記錄當時的系統負載，幫助判斷是死鎖還是資源不足
     LOAD=$(cat /proc/loadavg)
     MEM=$(free -m | awk '/^Mem:/{print $3}')
-    restart_service "/odom timeout or no data (Exit: $EXIT_CODE, Load: $LOAD, MemUsed: ${MEM}MB), possible dead-lock"
+    restart_service "/odom timeout or no data after retry (Exit: $EXIT_CODE, Load: $LOAD, MemUsed: ${MEM}MB)"
     exit 0
 fi
 
