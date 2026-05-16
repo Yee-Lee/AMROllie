@@ -84,10 +84,16 @@
 3.  **AGENT_LOSING**：當 Ping 失敗時進入此緩衝期 (Debounce)。持續 **5 秒** (每秒 Ping 一次) 嘗試恢復連線，期間觸發 Core 0 的零秒煞停。
 4.  **AGENT_DISCONNECTED**：確認斷線。呼叫 `destroy_entities()` 釋放所有 ROS 資源，清除殘留的速度快取，隨後重置計時器並回到 `WAITING_AGENT`。
 
-### Topic 與 Service 定義
-- **Publisher**: `/odom` (nav_msgs/Odometry, 包含四元數轉換), `/sonar/left`, `/sonar/right` (sensor_msgs/Range)。
-- **Subscriber**: `/cmd_vel` (geometry_msgs/Twist)。
-- **Service**: `/reset_odom` (std_srvs/Trigger, 用於重置里程計與累積誤差)。
+### Topic 與 Service 定義 (與 QoS 策略)
+為了與 ROS 2 的標準節點 (如 Nav2, RViz2 等) 完美相容並避免 QoS Mismatch (服務品質不匹配) 導致的拒收問題，各主題的 QoS 設定如下：
+
+- **Publisher**:
+  - `/odom` (nav_msgs/Odometry, 包含四元數轉換)：**Reliable (預設 QoS)**。確保關鍵的軌跡推算資料不遺漏，並符合上位機對 Odometry 的標準要求。
+  - `/sonar/left`, `/sonar/right` (sensor_msgs/Range)：**Best Effort QoS**。感測器高頻資料允許偶爾丟包，藉此降低 UART 頻寬佔用。
+- **Subscriber**:
+  - `/cmd_vel` (geometry_msgs/Twist)：**Best Effort QoS**。網路壅塞時直接處理最新速度指令，不重傳舊指令，確保即時性。
+- **Service**:
+  - `/reset_odom` (std_srvs/Trigger, 用於重置里程計與累積誤差)：**Reliable (預設 QoS)**。確保重置指令必定到達。
 
 ---
 

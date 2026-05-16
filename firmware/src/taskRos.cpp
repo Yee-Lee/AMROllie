@@ -1,5 +1,6 @@
 #include "task.h"
 #include <micro_ros_platformio.h>
+#include <micro_ros_utilities/string_utilities.h>
 #include <rcl/rcl.h>
 #include <rclc/rclc.h>
 #include <rclc/executor.h>
@@ -72,13 +73,6 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
         int32_t sec = (int32_t)(time_ns / 1000000000);
         uint32_t nanosec = (uint32_t)(time_ns % 1000000000);
 
-        // 每秒 (相當於 20 次 callback) 透過序列埠印出一次時間戳記狀態，確認是否同步
-        static int log_counter = 0;
-        if (log_counter++ >= 20) {
-            // Serial.printf("[ROS] Sync: %s | Epoch Sec: %d\n", rmw_uros_epoch_synchronized() ? "YES" : "NO", sec);
-            log_counter = 0;
-        }
-
         // 替所有的 Header 蓋上時間戳記
         msg_odom.header.stamp.sec = sec;
         msg_odom.header.stamp.nanosec = nanosec;
@@ -101,13 +95,35 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
         msg_odom.twist.twist.angular.z = current_w;
 
         // 發布 Odom
-        (void)rcl_publish(&pub_odom, &msg_odom, NULL);
+        rcl_ret_t ret_odom = rcl_publish(&pub_odom, &msg_odom, NULL);
+        if (ret_odom != RCL_RET_OK) {
+            static int error_counter_odom = 0;
+            if (error_counter_odom++ >= 50) { // 每 5 秒印一次 (10Hz * 50 = 5s)
+                Serial.printf("[ROS] Publish Odom failed: %d\n", (int)ret_odom);
+                error_counter_odom = 0;
+            }
+        }
 
         // 發布超音波資料
         msg_sonar_left.range = s_left / 100.0f; // 單位轉換：公分 (cm) 轉為公尺 (m)
-        (void)rcl_publish(&pub_sonar_left, &msg_sonar_left, NULL);
+        rcl_ret_t ret_sl = rcl_publish(&pub_sonar_left, &msg_sonar_left, NULL);
+        if (ret_sl != RCL_RET_OK) {
+            static int error_counter_sl = 0;
+            if (error_counter_sl++ >= 50) {
+                Serial.printf("[ROS] Publish Sonar L failed: %d\n", (int)ret_sl);
+                error_counter_sl = 0;
+            }
+        }
+
         msg_sonar_right.range = s_right / 100.0f; // 單位轉換：公分 (cm) 轉為公尺 (m)
-        (void)rcl_publish(&pub_sonar_right, &msg_sonar_right, NULL);
+        rcl_ret_t ret_sr = rcl_publish(&pub_sonar_right, &msg_sonar_right, NULL);
+        if (ret_sr != RCL_RET_OK) {
+            static int error_counter_sr = 0;
+            if (error_counter_sr++ >= 50) {
+                Serial.printf("[ROS] Publish Sonar R failed: %d\n", (int)ret_sr);
+                error_counter_sr = 0;
+            }
+        }
     }
 }
 
@@ -128,33 +144,29 @@ bool create_entities() {
 
     if (rclc_node_init_default(&node, "base_controller_node", "", &support) != RCL_RET_OK) return false;
 
-    // --- 初始化 Publisher: /odom ---
-    if (rclc_publisher_init_best_effort(&pub_odom, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(nav_msgs, msg, Odometry), "odom") != RCL_RET_OK) return false;
+    // --- 初始化 Publisher: /odom (改為 Default/Reliable QoS 以符合 ROS 2 上位機預設標準) ---
+    if (rclc_publisher_init_default(&pub_odom, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(nav_msgs, msg, Odometry), "odom") != RCL_RET_OK) return false;
 
-    // 設定 Odom 訊息的靜態 Frame ID
-    msg_odom.header.frame_id.data = (char*)"odom";
-    msg_odom.header.frame_id.size = strlen("odom");
-    msg_odom.header.frame_id.capacity = msg_odom.header.frame_id.size + 1;
-    msg_odom.child_frame_id.data = (char*)"base_link";
-    msg_odom.child_frame_id.size = strlen("base_link");
-    msg_odom.child_frame_id.capacity = msg_odom.child_frame_id.size + 1;
+    // 設定 Odom 訊息的靜態 Frame ID 與初始化協方差矩陣為 0
+    msg_odom.header.frame_id = micro_ros_string_utilities_init("odom");
+    msg_odom.child_frame_id = micro_ros_string_utilities_init("base_link");
+    for (int i = 0; i < 36; i++) {
+        msg_odom.pose.covariance[i] = 0.0;
+        msg_odom.twist.covariance[i] = 0.0;
+    }
 
     // --- 初始化 Publisher: /sonar/left 與 /sonar/right ---
     if (rclc_publisher_init_best_effort(&pub_sonar_left, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, Range), "sonar/left") != RCL_RET_OK) return false;
     if (rclc_publisher_init_best_effort(&pub_sonar_right, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, Range), "sonar/right") != RCL_RET_OK) return false;
 
     // 設定超音波訊息的固定參數
-    msg_sonar_left.header.frame_id.data = (char*)"left_ultrasonic_link";
-    msg_sonar_left.header.frame_id.size = strlen("left_ultrasonic_link");
-    msg_sonar_left.header.frame_id.capacity = msg_sonar_left.header.frame_id.size + 1;
+    msg_sonar_left.header.frame_id = micro_ros_string_utilities_init("left_ultrasonic_link");
     msg_sonar_left.radiation_type = sensor_msgs__msg__Range__ULTRASOUND;
     msg_sonar_left.field_of_view = 0.26f;
     msg_sonar_left.min_range = 0.02f;
     msg_sonar_left.max_range = 4.00f;
 
-    msg_sonar_right.header.frame_id.data = (char*)"right_ultrasonic_link";
-    msg_sonar_right.header.frame_id.size = strlen("right_ultrasonic_link");
-    msg_sonar_right.header.frame_id.capacity = msg_sonar_right.header.frame_id.size + 1;
+    msg_sonar_right.header.frame_id = micro_ros_string_utilities_init("right_ultrasonic_link");
     msg_sonar_right.radiation_type = sensor_msgs__msg__Range__ULTRASOUND;
     msg_sonar_right.field_of_view = 0.26f;
     msg_sonar_right.min_range = 0.02f;
@@ -166,8 +178,8 @@ bool create_entities() {
     // --- 初始化 Service: /reset_odom ---
     if (rclc_service_init_default(&srv_reset_odom, &node, ROSIDL_GET_SRV_TYPE_SUPPORT(std_srvs, srv, Trigger), "reset_odom") != RCL_RET_OK) return false;
 
-    // --- 初始化 Timer (20Hz = 50ms) ---
-    if (rclc_timer_init_default(&ros_timer, &support, RCL_MS_TO_NS(50), timer_callback) != RCL_RET_OK) return false;
+    // --- 初始化 Timer (10Hz = 100ms，降低頻率以節省 Serial 頻寬) ---
+    if (rclc_timer_init_default(&ros_timer, &support, RCL_MS_TO_NS(100), timer_callback) != RCL_RET_OK) return false;
 
     // --- 初始化 Executor ---
     if (rclc_executor_init(&executor, &support.context, 3, &allocator) != RCL_RET_OK) return false;
@@ -192,6 +204,12 @@ void destroy_entities() {
     (void) rclc_executor_fini(&executor);
     (void) rcl_node_fini(&node);
     (void) rclc_support_fini(&support);
+
+    // 釋放動態分配的字串記憶體
+    micro_ros_string_utilities_destroy(&msg_odom.header.frame_id);
+    micro_ros_string_utilities_destroy(&msg_odom.child_frame_id);
+    micro_ros_string_utilities_destroy(&msg_sonar_left.header.frame_id);
+    micro_ros_string_utilities_destroy(&msg_sonar_right.header.frame_id);
 }
 
 // 非阻塞 LED 更新邏輯
