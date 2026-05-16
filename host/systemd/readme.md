@@ -38,9 +38,9 @@ sudo systemctl enable --now ollie_lidar.service
 
 ### 3. 啟動主動看門狗 (Active Watchdog)
 即使服務正在運行，通訊也可能因 Serial 緩存溢位而「假死」。看門狗負責主動偵測 `/odom` 數據，並在異常時強制重啟通訊。
-啟動看門狗的 Systemd Timer：
+啟動看門狗服務：
 ```bash
-sudo systemctl enable --now ollie_watchdog.timer
+sudo systemctl enable --now ollie_watchdog.service
 ```
 
 ---
@@ -55,7 +55,7 @@ sudo systemctl enable --now ollie_watchdog.timer
 ./ollie_status.sh
 ```
 *   🟢 **active**：代表服務正常運行中。
-*   🛡️ **active**：代表看門狗防護網已掛載且正在計時中。
+*   🛡️ **active**：代表看門狗防護網已啟動。
 *   ❓ **unknown (activating)**：代表服務正在啟動中（若卡住請檢查硬體連線）。
 
 ### 2. 查驗服務日誌 (Debug)
@@ -65,17 +65,23 @@ sudo systemctl enable --now ollie_watchdog.timer
 sudo journalctl -u ollie_microros.service -f
 
 # 查看看門狗的定期巡邏紀錄
-sudo journalctl -u ollie_watchdog.service -n 20
+sudo journalctl -u ollie_watchdog.service -f
 ```
 
+#### 💡 如何驗證看門狗是否正常接收到 Odom？
+您可以透過觀察 `ollie_watchdog.service` 的即時日誌來確認：
+*   **正常接收時**：啟動後若收到第一筆資料，會出現 `✅ 系統通訊正常！開始接收 /odom 數據。`。
+*   **通訊中斷時**：會顯示 `⚠️ 已經 X.X 秒未收到 /odom 資料`，並觸發重啟。
+*   **手動驗證**：在另一個終端機執行 `ros2 topic echo /odom`。若此處有資料但看門狗仍報錯，請檢查 `ROS_DOMAIN_ID` 是否皆設定為 `30`。
+
 ### 3. 查看看門狗異常重啟紀錄
-看門狗只會在「抓到異常並執行重啟」時寫入此專屬日誌，它是系統韌性的重要指標：
+看門狗只會在「抓到異常並執行重啟」時將事件紀錄到專屬日誌中，這有助於事後分析系統穩定性：
 ```bash
 cat /var/log/ollie_watchdog.log
 ```
 
 ---
-*💡 提示：在關閉機器人電源或拔除 ESP32 進行離線調試前，建議暫時關閉看門狗以避免無意義的重啟日誌：`sudo systemctl stop ollie_watchdog.timer`*
+*💡 提示：在關閉機器人電源或拔除 ESP32 進行離線調試前，建議暫時關閉看門狗以避免無意義的重啟日誌：`sudo systemctl stop ollie_watchdog.service`*
 
 ---
 
@@ -98,7 +104,7 @@ cp ollie_microros.service.template ollie_microros.service
 *   **使用者名稱**：找到 `User=<your_username>`，將其替換為您目前的 Linux 帳號（例如 `User=ollie`）。
 *   **絕對路徑**：找到 `ExecStart=` 內的 `/home/<your_username>/workspace/AMROllie/host/`，將其替換為專案在您機器上的真實絕對路徑。
 
-*(對於 `ollie_watchdog.service` 與 `ollie_watchdog.timer` 也需進行相同替換。)*
+*(對於 `ollie_watchdog.service` 也需進行相同替換。)*
 
 ### 3. 手動建立軟連結 (Symbolic Link)
 為了讓 `systemd` 能夠識別這些服務，您必須將修改好的 `.service` 檔案軟連結到 `/etc/systemd/system/` 目錄下：
@@ -109,7 +115,6 @@ sudo ln -s ~/workspace/AMROllie/host/systemd/system/ollie_description.service /e
 sudo ln -s ~/workspace/AMROllie/host/systemd/system/ollie_lidar.service /etc/systemd/system/
 # 如果要部署看門狗：
 sudo ln -s ~/workspace/AMROllie/host/systemd/system/ollie_watchdog.service /etc/systemd/system/
-sudo ln -s ~/workspace/AMROllie/host/systemd/system/ollie_watchdog.timer /etc/systemd/system/
 ```
 
 ### 4. 重新載入 Systemd

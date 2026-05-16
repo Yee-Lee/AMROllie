@@ -56,7 +56,17 @@ class OllieWatchdogNode(Node):
     def restart_microros(self):
         try:
             self.get_logger().info("🔄 正在執行 systemctl restart...")
-            subprocess.run(["sudo", "systemctl", "restart", self.target_service], check=True)
+            
+            # 紀錄到專屬日誌檔 (如 readme.md 所述)
+            log_msg = f"[{time.ctime()}] Watchdog triggered restart of {self.target_service} due to Odom timeout.\n"
+            try:
+                with open("/var/log/ollie_watchdog.log", "a") as f:
+                    f.write(log_msg)
+            except Exception as log_e:
+                self.get_logger().warn(f"無法寫入日誌檔 /var/log/ollie_watchdog.log: {log_e}")
+
+            # 服務現在以 root 執行，不需要 sudo
+            subprocess.run(["systemctl", "restart", self.target_service], check=True)
             self.get_logger().info("🔄 服務重啟命令發送成功！給予 10 秒寬限期等待 Micro-ROS Agent 啟動...")
             time.sleep(10.0)  # 給 Agent 一點時間啟動與重連
         except subprocess.CalledProcessError as e:

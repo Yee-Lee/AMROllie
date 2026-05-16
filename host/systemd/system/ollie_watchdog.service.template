@@ -5,7 +5,7 @@ Wants=ollie_microros.service
 
 [Service]
 Type=simple
-User=<your_username>
+User=root
 Environment="ROS_DOMAIN_ID=30"
 Environment="PYTHONUNBUFFERED=1"
 ExecStart=/bin/bash -c "source /opt/ros/humble/setup.bash && /home/<your_username>/workspace/AMROllie/host/systemd/ollie_watchdog_node.py"
