@@ -135,11 +135,13 @@ void taskBaseController(void *pvParameters) {
         // 3.6 更新里程計 (Odometry)
         odom.update(leftMotor.getCurrRPM(), rightMotor.getCurrRPM(), correct_actual_w);
 
-        // 4. 安全寫入上行遙測變數
+        // 4. 安全寫入上行遙測變數 (包含提供給 taskROS 使用的煞停狀態)
         portENTER_CRITICAL(&mux);
         odom_x = odom.getX(); odom_y = odom.getY(); odom_theta = odom.getTheta();
         actual_v = odom.getLinearV(); actual_w = correct_actual_w;
         sonar_left_dist = reactiveBrake.getLeftDistance(); sonar_right_dist = reactiveBrake.getRightDistance();
+        // 將底層的緊急煞停狀態同步到全域變數，供 taskROS 控制紅色急閃燈效
+        status_emergency_brake = reactiveBrake.isBraking();
         portEXIT_CRITICAL(&mux);
 
         // 5. 每 500ms 透過 USB Serial 印出 Debug 資訊 (完全不影響接在 Serial2 的 micro-ROS)

@@ -3,6 +3,15 @@
 
 #include <Arduino.h>
 
+// --- 系統狀態與 LED 定義 ---
+#define LED_PIN 2
+#define NUM_LEDS 1
+
+enum AgentState {
+    WAITING_AGENT,
+    AGENT_CONNECTED
+};
+
 // --- 3. 共享變數與執行緒安全 ---
 extern portMUX_TYPE mux;
 
@@ -15,6 +24,7 @@ extern volatile bool flag_reset_odom;
 extern volatile float odom_x, odom_y, odom_theta;
 extern volatile float actual_v, actual_w;
 extern volatile float sonar_left_dist, sonar_right_dist;
+extern volatile bool status_emergency_brake;
 
 // --- 任務宣告 ---
 void initBaseControllerHardware();

@@ -21,6 +21,9 @@ private:
     const float DANGER_ZONE = SONAR_DANGER_ZONE;
     const float WARNING_ZONE = SONAR_WARNING_ZONE;
 
+    // 狀態變數
+    bool _is_braking = false;
+
     // 感測器更新計時
     unsigned long _last_trigger_time = 0;
     bool _is_left_sensor_next = true;
@@ -72,11 +75,19 @@ public:
             }
             _is_left_sensor_next = !_is_left_sensor_next;
         }
+
+        // 獨立於 filter 之外更新狀態：只要有障礙物在危險區，就設定 _is_braking 為 true
+        // 這樣即使車輛靜止 (未呼叫 filter)，LED 也能顯示紅色急閃
+        float d_min = min(getLeftDistance(), getRightDistance());
+        _is_braking = (d_min < DANGER_ZONE);
     }
 
     // 取得當前距離 (封裝的 Getter)
     float getLeftDistance() const { return _duration_L * 0.01715f; }
     float getRightDistance() const { return _duration_R * 0.01715f; }
+
+    // 取得目前是否處於煞停狀態
+    bool isBraking() const { return _is_braking; }
 
     /**
      * @brief 根據感測器距離過濾目標速度

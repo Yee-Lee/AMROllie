@@ -28,7 +28,7 @@
   - **頻率**：依 Executor 與 Timer 設定 (10Hz 發佈 Odometry 與超音波資料)。
   - **職責**：
     - 運行 `rclc_executor_spin_some(&executor, timeout)` 處理 ROS 2 收發。
-    - 執行 timer_callback (10Hz)：讀取 `taskBaseController` 算出的最新位姿資料與感測器距離，打包發布至 `/odom` (含四元數轉換)、`/sonar/left` 與 `/sonar/right`。
+    - 執行 timer_callback (10Hz)：讀取 `taskBaseController` 算出的最新位姿資料與感測器距離，打包發布至 `/odom` (含 四元數轉換)、`/sonar/left` 與 `/sonar/right`。
     - 執行訂閱回呼 (如 `/cmd_vel`)：接收上位機速度指令，並更新給 taskPID 的目標值。
     - 執行服務回呼 (如 `/reset_odom`)：接收上位機請求，重置底層里程計與 IMU 積分。
 - **中斷服務常式 (ISRs)**：
@@ -39,7 +39,7 @@
 
 傳統的 `setup()` 僅用於：硬體腳位初始化、micro-ROS 初始化、呼叫 `xTaskCreatePinnedToCore` 建立上述兩個 Task。
 
-建立完畢後，在 `setup()` 尾端呼叫 `vTaskDelete(NULL)` 殺掉預設的 loopTask 釋放記憶體。傳統的 `loop()` 函數保持空白。
+建立完畢後，在 `setup()` 尾端呼叫 `vTaskDelete(NULL)` 殺掉預設的 loopTask 釋放記憶體。傳統的 `loop()` 函數保持空白 。
 
 ## 3. 資料共享與執行緒安全 (Thread Safety)
 
@@ -61,17 +61,21 @@
 ### 已完成 (Completed)
 1. **FreeRTOS 雙核架構**：成功將馬達控制 (`taskBaseController`, Core 0, 100Hz) 與通訊代理 (`taskROS`, Core 1, 10Hz) 分離，並使用 `vTaskDelayUntil` 確保精準頻率。
 2. **Spinlock 保護**：雙核共用變數 (如 `cmd_target_v`, `odom_x` 等) 已使用 `portMUX_TYPE` 保護，無競態條件風險。
-3. **micro-ROS UART 通訊**：目前底層 Transport 綁定至預設 USB `Serial` (UART0)，可直接透過 USB 與 PC 進行快速 Agent 連線測試。若要實際安裝至車體與 RPi 對接，只需將程式碼改為 `Serial2` (TX=17/RX=16) 並透過硬體線路連接即可。
-4. **Topic 收發驗證**：
+3. **Topic 收發驗證**：
    - 成功發佈 `/odom` (並完成 Yaw 到四元數 Quaternion 轉換) 以及 `/sonar/left`, `/sonar/right`。
    - 成功訂閱 `/cmd_vel`，可正確解析上位機下達的 `Twist` 速度指令。
    - 成功註冊 `/reset_odom` 服務，可隨時重置里程計與 IMU 積分。
-5. **安全機制**：實作了基礎的 `stopMotors()` 斷電保護。
-6. **硬體實作整合**：完成 `Motor`, `PIDController`, `MotionController`, `Odometry`, `ReactiveBrake` 等底層模組的封裝與整合。
+4. **安全機制**：實作了基礎的 `stopMotors()` 斷電保護。
+5. **硬體實作整合**：完成 `Motor`, `PIDController`, `MotionController`, `Odometry`, `ReactiveBrake` 等底層模組的封裝與整合。
+6. **非阻塞狀態機與 LED 狀態指示 (階段一)**：
+   - 成功將 `taskROS` 從阻塞式等待 Agent 連線重構為非阻塞 Switch-Case 狀態機 (`WAITING_AGENT`, `AGENT_CONNECTED`)。
+   - 整合 FastLED 驅動 WS2812B (Pin 2)，提供即時的視覺狀態回饋：藍色呼吸 (未連線)、綠色常亮 (連線中)、紅色急閃 (底層觸發超音波防撞危險區)。
+   - **架構解耦**：將 `ReactiveBrake` 模組的煞車狀態透過共享變數 `status_emergency_brake` 安全地傳遞給 `taskROS`，確保即使車輛靜止時有障礙物靠近，也能正確觸發紅色急閃。
 
 ### 下一步實作 (Next Steps)
-1. **實車調適與參數最佳化**：使用實際載具微調 `config.h` 中的 `MOTOR_PID_KP/KI/KD` 參數，確保運動與防撞平順。
-2. **上位機 (Raspberry Pi) 整合**：開發 ROS 2 導航堆疊 (Nav2) 節點，結合 LiDAR 進行 SLAM 與路徑規劃。
+1. **連線穩定度管理 (Ping & Debounce) (階段二)**：在非阻塞狀態下加入週期性 Ping 與斷線容錯計數器，避免網路雜訊造成頻繁重連，並實作乾淨的 ROS 資源釋放 (`destroy_entities`)。
+2. **速度指令逾時看門狗與零秒煞停 (階段三)**：確保斷線或軟體當機時能主動煞停車輛。
+3. **上位機 (Raspberry Pi) 整合**：開發 ROS 2 導航堆疊 (Nav2) 節點，結合 LiDAR 進行 SLAM 與路徑規劃。
 
 ## 6. 專案目錄結構 (Directory Structure)
 
