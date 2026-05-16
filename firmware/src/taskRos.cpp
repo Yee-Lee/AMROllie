@@ -195,33 +195,20 @@ void destroy_entities() {
 }
 
 // 非阻塞 LED 更新邏輯
-void updateLED(AgentState state) {
+void updateLED(AgentState agent_state) {
     portENTER_CRITICAL(&mux);
-    // 讀取由 taskBaseController 同步的全域緊急煞停狀態
-    bool is_braking = status_emergency_brake;
+    // 讀取由 taskBaseController 同步的全域感測器等級
+    SensorStatus sensor_status = current_sensor_status;
     portEXIT_CRITICAL(&mux);
 
-    if (state == WAITING_AGENT) {
+    // --- 優先級一：連線狀況 (系統健康度) ---
+    if (agent_state == WAITING_AGENT) {
         // 藍色呼吸燈 (未連線狀態)
         float breath = (exp(sin(millis() / 2000.0 * PI)) - 0.36787944) * 108.0;
         leds[0] = CRGB::Blue;
         FastLED.setBrightness(breath);
-    } else if (state == AGENT_CONNECTED) {
-        if (is_braking) {
-            // 紅色急閃 5Hz (連線中，但底層觸發了防撞/煞停機制)
-            if (millis() % 200 < 100) {
-                leds[0] = CRGB::Red;
-                FastLED.setBrightness(255);
-            } else {
-                leds[0] = CRGB::Black;
-                FastLED.setBrightness(0);
-            }
-        } else {
-            // 綠色常亮 (正常運作狀態)
-            leds[0] = CRGB::Green;
-            FastLED.setBrightness(100); // 調整至適當亮度避免過亮
-        }
-    } else if (state == AGENT_LOSING) {
+    } 
+    else if (agent_state == AGENT_LOSING) {
         // 黃色閃爍 2Hz (懷疑斷線，Debounce 中)
         if (millis() % 500 < 250) {
             leds[0] = CRGB::Yellow;
@@ -230,10 +217,34 @@ void updateLED(AgentState state) {
             leds[0] = CRGB::Black;
             FastLED.setBrightness(0);
         }
-    } else if (state == AGENT_DISCONNECTED) {
-        // 斷線清理瞬間 (通常極短)，顯示紅色常亮
+    } 
+    else if (agent_state == AGENT_DISCONNECTED) {
+        // 斷線清理瞬間，顯示紅色常亮
         leds[0] = CRGB::Red;
         FastLED.setBrightness(100);
+    }
+    // --- 優先級二：感測器狀態 (僅在連線正常時顯示) ---
+    else if (agent_state == AGENT_CONNECTED) {
+        if (sensor_status == SENSOR_BRAKE) {
+            // 紅色急閃 5Hz (危險煞停區)
+            if (millis() % 200 < 100) {
+                leds[0] = CRGB::Red;
+                FastLED.setBrightness(255);
+            } else {
+                leds[0] = CRGB::Black;
+                FastLED.setBrightness(0);
+            }
+        } 
+        else if (sensor_status == SENSOR_WARNING) {
+            // 橘色常亮 (警告減速區)
+            leds[0] = CRGB::Orange;
+            FastLED.setBrightness(150);
+        } 
+        else {
+            // 綠色常亮 (安全區域)
+            leds[0] = CRGB::Green;
+            FastLED.setBrightness(100);
+        }
     }
     FastLED.show();
 }

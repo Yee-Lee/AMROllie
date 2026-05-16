@@ -153,6 +153,16 @@ void taskBaseController(void *pvParameters) {
         actual_v = odom.getLinearV(); actual_w = correct_actual_w;
         sonar_left_dist = reactiveBrake.getLeftDistance(); sonar_right_dist = reactiveBrake.getRightDistance();
         status_emergency_brake = reactiveBrake.isBraking();
+
+        // 根據距離判定感測器等級 (感測器狀態解耦)
+        float d_min = min(sonar_left_dist, sonar_right_dist);
+        if (d_min < SONAR_DANGER_ZONE) {
+            current_sensor_status = SENSOR_BRAKE;
+        } else if (d_min < SONAR_WARNING_ZONE) {
+            current_sensor_status = SENSOR_WARNING;
+        } else {
+            current_sensor_status = SENSOR_SAFE;
+        }
         portEXIT_CRITICAL(&mux);
 
         // 5. 每 500ms 透過 USB Serial 印出 Debug 資訊 (完全不影響接在 Serial2 的 micro-ROS)
