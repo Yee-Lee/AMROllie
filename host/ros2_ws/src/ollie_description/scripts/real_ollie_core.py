@@ -41,7 +41,8 @@ class RealOllieCore(Node):
         # 1. 轉發 TF (將 ESP32 算的 odom 轉成地圖座標系)
         # ==========================================
         t = TransformStamped()
-        t.header.stamp = msg.header.stamp
+        #t.header.stamp = msg.header.stamp
+        t.header.stamp = current_time_msg
         t.header.frame_id = 'odom'
         t.child_frame_id = 'base_link'
         
@@ -68,7 +69,8 @@ class RealOllieCore(Node):
         self.right_wheel_angle += (v_right / self.wheel_radius) * dt
 
         joint_msg = JointState()
-        joint_msg.header.stamp = msg.header.stamp
+        #joint_msg.header.stamp = msg.header.stamp
+        joint_msg.header.stamp = current_time_msg
         joint_msg.name = ['left_wheel_joint', 'right_wheel_joint']
         joint_msg.position = [self.left_wheel_angle, self.right_wheel_angle]
         self.joint_pub.publish(joint_msg)
