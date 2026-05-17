@@ -12,6 +12,7 @@ class OllieWatchdogNode(Node):
         # --- Watchdog 參數設定 ---
         self.timeout_threshold = 5.0  # 幾秒沒收到資料判定為超時
         self.check_interval = 1.0     # 每秒檢查一次
+        self.retry_interval = 15.0    # 離線狀態下，每隔幾秒再次嘗試重啟
         self.target_service = "ollie_microros.service"
         
         # 初始化狀態
@@ -50,8 +51,13 @@ class OllieWatchdogNode(Node):
                 self.is_restarting = True
                 self.restart_microros()
             else:
-                # 原本就離線(例如正在等待重啟完成)：每 5 秒回報一次進度，避免日誌洗頻
-                self.get_logger().info(f"⏳ 持續等待 /odom 恢復中... (已斷線 {elapsed_time:.1f} 秒)", throttle_duration_sec=5.0)
+                # 已經是離線狀態，檢查是否超過再次重啟的閾值
+                if elapsed_time > self.retry_interval:
+                    self.get_logger().error(f"⚠️ 離線狀態已持續 {elapsed_time:.1f} 秒，再次嘗試重啟 {self.target_service} ...")
+                    self.is_restarting = True
+                    self.restart_microros()
+                else:
+                    self.get_logger().info(f"⏳ 持續等待 /odom 恢復中... (已斷線 {elapsed_time:.1f} 秒)", throttle_duration_sec=5.0)
 
     def restart_microros(self):
         try:
