@@ -89,6 +89,7 @@
 
 - **Publisher**:
   - `/odom` (nav_msgs/Odometry, 包含四元數轉換)：**Reliable (預設 QoS)**。確保關鍵的軌跡推算資料不遺漏，並符合上位機對 Odometry 的標準要求。
+  - `/tf` (tf2_msgs/TFMessage)：**Reliable (預設 QoS)**。發布 `odom` 至 `base_link` 的座標轉換 (Transform)。為避免微控制器動態記憶體配置 (malloc) 導致碎片化，底層實作採用靜態陣列 (`tf_array[1]`) 預先綁定指標。
   - `/sonar/left`, `/sonar/right` (sensor_msgs/Range)：**Best Effort QoS**。感測器高頻資料允許偶爾丟包，藉此降低 UART 頻寬佔用。
 - **Subscriber**:
   - `/cmd_vel` (geometry_msgs/Twist)：**Best Effort QoS**。網路壅塞時直接處理最新速度指令，不重傳舊指令，確保即時性。

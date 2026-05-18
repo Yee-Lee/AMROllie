@@ -9,6 +9,7 @@
 #include <geometry_msgs/msg/twist.h>
 #include <nav_msgs/msg/odometry.h>
 #include <sensor_msgs/msg/range.h>
+#include <tf2_msgs/msg/tf_message.h>
 #include <std_srvs/srv/trigger.h>
 #include <FastLED.h>
 
@@ -24,6 +25,7 @@ rcl_node_t node;
 rcl_publisher_t pub_odom;
 rcl_publisher_t pub_sonar_left;
 rcl_publisher_t pub_sonar_right;
+rcl_publisher_t pub_tf;
 rcl_subscription_t sub_cmd_vel;
 rcl_service_t srv_reset_odom;
 rcl_timer_t ros_timer;
@@ -32,6 +34,8 @@ geometry_msgs__msg__Twist msg_cmd_vel;
 nav_msgs__msg__Odometry msg_odom;
 sensor_msgs__msg__Range msg_sonar_left;
 sensor_msgs__msg__Range msg_sonar_right;
+tf2_msgs__msg__TFMessage msg_tf;
+geometry_msgs__msg__TransformStamped tf_array[1]; // TF 陣列記憶體
 std_srvs__srv__Trigger_Request req_reset_odom;
 std_srvs__srv__Trigger_Response res_reset_odom;
 
@@ -80,6 +84,8 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
         msg_sonar_left.header.stamp.nanosec = nanosec;
         msg_sonar_right.header.stamp.sec = sec;
         msg_sonar_right.header.stamp.nanosec = nanosec;
+        msg_tf.transforms.data[0].header.stamp.sec = sec;
+        msg_tf.transforms.data[0].header.stamp.nanosec = nanosec;
 
         // 1. 填入 Odom 位置與姿態 (將 Yaw 轉換為四元數)
         msg_odom.pose.pose.position.x = current_x;
@@ -94,6 +100,16 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
         msg_odom.twist.twist.linear.x = current_v;
         msg_odom.twist.twist.angular.z = current_w;
 
+        // 3. 填入 TF 轉換 (odom -> base_link)
+        msg_tf.transforms.data[0].transform.translation.x = current_x;
+        msg_tf.transforms.data[0].transform.translation.y = current_y;
+        msg_tf.transforms.data[0].transform.translation.z = 0.0;
+        
+        msg_tf.transforms.data[0].transform.rotation.x = 0.0;
+        msg_tf.transforms.data[0].transform.rotation.y = 0.0;
+        msg_tf.transforms.data[0].transform.rotation.z = sin(current_theta / 2.0f);
+        msg_tf.transforms.data[0].transform.rotation.w = cos(current_theta / 2.0f);
+
         // 發布 Odom
         rcl_ret_t ret_odom = rcl_publish(&pub_odom, &msg_odom, NULL);
         if (ret_odom != RCL_RET_OK) {
@@ -101,6 +117,16 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
             if (error_counter_odom++ >= 50) { // 每 5 秒印一次 (10Hz * 50 = 5s)
                 Serial.printf("[ROS] Publish Odom failed: %d\n", (int)ret_odom);
                 error_counter_odom = 0;
+            }
+        }
+
+        // 發布 TF
+        rcl_ret_t ret_tf = rcl_publish(&pub_tf, &msg_tf, NULL);
+        if (ret_tf != RCL_RET_OK) {
+            static int error_counter_tf = 0;
+            if (error_counter_tf++ >= 50) {
+                Serial.printf("[ROS] Publish TF failed: %d\n", (int)ret_tf);
+                error_counter_tf = 0;
             }
         }
 
@@ -155,6 +181,16 @@ bool create_entities() {
         msg_odom.twist.covariance[i] = 0.0;
     }
 
+    // --- 初始化 Publisher: /tf ---
+    if (rclc_publisher_init_default(&pub_tf, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(tf2_msgs, msg, TFMessage), "/tf") != RCL_RET_OK) return false;
+    
+    // 設定 TF 陣列記憶體與靜態字串
+    msg_tf.transforms.data = tf_array;
+    msg_tf.transforms.size = 1;
+    msg_tf.transforms.capacity = 1;
+    msg_tf.transforms.data[0].header.frame_id = micro_ros_string_utilities_init("odom");
+    msg_tf.transforms.data[0].child_frame_id = micro_ros_string_utilities_init("base_link");
+
     // --- 初始化 Publisher: /sonar/left 與 /sonar/right ---
     if (rclc_publisher_init_best_effort(&pub_sonar_left, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, Range), "sonar/left") != RCL_RET_OK) return false;
     if (rclc_publisher_init_best_effort(&pub_sonar_right, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, Range), "sonar/right") != RCL_RET_OK) return false;
@@ -198,6 +234,7 @@ void destroy_entities() {
     (void) rcl_publisher_fini(&pub_odom, &node);
     (void) rcl_publisher_fini(&pub_sonar_left, &node);
     (void) rcl_publisher_fini(&pub_sonar_right, &node);
+    (void) rcl_publisher_fini(&pub_tf, &node);
     (void) rcl_subscription_fini(&sub_cmd_vel, &node);
     (void) rcl_service_fini(&srv_reset_odom, &node);
     (void) rcl_timer_fini(&ros_timer);
@@ -210,6 +247,8 @@ void destroy_entities() {
     micro_ros_string_utilities_destroy(&msg_odom.child_frame_id);
     micro_ros_string_utilities_destroy(&msg_sonar_left.header.frame_id);
     micro_ros_string_utilities_destroy(&msg_sonar_right.header.frame_id);
+    micro_ros_string_utilities_destroy(&msg_tf.transforms.data[0].header.frame_id);
+    micro_ros_string_utilities_destroy(&msg_tf.transforms.data[0].child_frame_id);
 }
 
 // 非阻塞 LED 更新邏輯
