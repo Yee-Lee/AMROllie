@@ -1,6 +1,6 @@
 # 🤖 AMROllie 上位機系統部署與防護指南
 
-本指南旨在協助開發者將 AMROllie 的上位機 (RPI3B) 環境轉化為一個**高可靠性、具備自我修復能力**的機器人系統。
+本指南旨在協助開發者將 AMROllie 的上位機 (RPi 5B) 環境轉化為一個**高可靠性、具備自我修復能力**的機器人系統。
 
 ## 🎯 我們的目標與方法
 
@@ -23,7 +23,7 @@
 ### 1. 執行安裝腳本
 請在終端機中導航到 `systemd` 目錄，然後執行安裝腳本：
 ```bash
-cd ~/workspace/AMROllie/host/systemd
+cd ~/workspace/AMROllie/host5b/systemd
 ./install_services.sh
 ```
 *腳本執行期間會請求 `sudo` 權限以建立系統軟連結與重新載入 systemd。*
@@ -94,7 +94,7 @@ cat /var/log/ollie_watchdog.log
 ### 1. 手動轉換範本 (Template -> Service)
 在 `systemd/system/` 目錄中，所有的檔案皆為 `.template`。您需要手動將其複製並重新命名，去除 `.template` 後綴。
 ```bash
-cd ~/workspace/AMROllie/host/systemd/system
+cd ~/workspace/AMROllie/host5b/systemd/system
 cp ollie_microros.service.template ollie_microros.service
 # 依此類推複製所有需要的檔案...
 ```
@@ -102,7 +102,7 @@ cp ollie_microros.service.template ollie_microros.service
 ### 2. 編輯路徑與權限
 打開您剛建立好的 `.service` 檔案，手動進行以下修改：
 *   **使用者名稱**：找到 `User=<your_username>`，將其替換為您目前的 Linux 帳號（例如 `User=ollie`）。
-*   **絕對路徑**：找到 `ExecStart=` 內的 `/home/<your_username>/workspace/AMROllie/host/`，將其替換為專案在您機器上的真實絕對路徑。
+*   **絕對路徑**：找到 `ExecStart=` 內的 `/home/<your_username>/workspace/AMROllie/host5b/`，將其替換為專案在您機器上的真實絕對路徑。
 
 *(對於 `ollie_watchdog.service` 也需進行相同替換。)*
 
@@ -110,11 +110,11 @@ cp ollie_microros.service.template ollie_microros.service
 為了讓 `systemd` 能夠識別這些服務，您必須將修改好的 `.service` 檔案軟連結到 `/etc/systemd/system/` 目錄下：
 ```bash
 # 建立軟連結
-sudo ln -s ~/workspace/AMROllie/host/systemd/system/ollie_microros.service /etc/systemd/system/
-sudo ln -s ~/workspace/AMROllie/host/systemd/system/ollie_description.service /etc/systemd/system/
-sudo ln -s ~/workspace/AMROllie/host/systemd/system/ollie_lidar.service /etc/systemd/system/
+sudo ln -s ~/workspace/AMROllie/host5b/systemd/system/ollie_microros.service /etc/systemd/system/
+sudo ln -s ~/workspace/AMROllie/host5b/systemd/system/ollie_description.service /etc/systemd/system/
+sudo ln -s ~/workspace/AMROllie/host5b/systemd/system/ollie_lidar.service /etc/systemd/system/
 # 如果要部署看門狗：
-sudo ln -s ~/workspace/AMROllie/host/systemd/system/ollie_watchdog.service /etc/systemd/system/
+sudo ln -s ~/workspace/AMROllie/host5b/systemd/system/ollie_watchdog.service /etc/systemd/system/
 ```
 
 ### 4. 重新載入 Systemd

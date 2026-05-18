@@ -1,6 +1,6 @@
  Ollie ROS 2 工作區與環境建置指南
 
-本目錄 (`host/ros2_ws`) 為 Ollie 上位機（Raspberry Pi 3B 或開發用 PC）的 ROS 2 工作區 (Workspace)。裡面存放了 Ollie 專屬的 ROS 2 套件，包含機器人模型描述 (`ollie_description`) 與光達驅動 (`ldlidar`) 等。
+本目錄 (`host5b/ros2_ws`) 為 Ollie 上位機（Raspberry Pi 5B 或開發用 PC）的 ROS 2 工作區 (Workspace)。裡面存放了 Ollie 專屬的 ROS 2 套件，包含機器人模型描述 (`ollie_description`) 與光達驅動 (`ldlidar`) 等。
 
 ---
 
@@ -17,11 +17,11 @@
 
 ---
 
-## 2. 如何安裝 ROS 2 Humble
+## 2. 如何安裝 ROS 2 Jazzy
 
-Ollie 專案採用 **ROS 2 Humble Hawksbill** 版本，且作業系統環境需為 **Ubuntu 22.04**。
+Ollie 專案採用 **ROS 2 Jazzy Jalisco** 版本，且作業系統環境需為 **Ubuntu 24.04**。
 
-> **💡 提示**：若你是在 Raspberry Pi 3B (實體車) 上安裝，為了節省有限的記憶體 (1GB) 與 SD 卡空間，強烈建議安裝無圖形介面的 `ros-base` 版本；若是在個人電腦或虛擬機上開發，則可安裝 `desktop` 版本。
+> **💡 提示**：若您是在 Raspberry Pi 5B 上安裝，詳細的工業級安裝與優化步驟請優先參考根目錄下的 `docs/rpi5_migration.md`。
 
 ### 步驟 1：設定語系 (Locale)
 確保系統支援 UTF-8：
@@ -47,26 +47,23 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-a
 ```
 
 ### 步驟 4：安裝 ROS 2 與編譯工具
-更新軟體清單並開始安裝（樹莓派請選 Base 版）：
+更新軟體清單並開始安裝：
 
 ```bash
 sudo apt update
 sudo apt upgrade -y
 
-# 【選項 A】實體車 RPi 3B (無桌面環境推薦)
-sudo apt install ros-humble-ros-base -y
-
-# 【選項 B】開發用 PC/Mac 虛擬機 (包含 RViz 等圖形化工具)
-# sudo apt install ros-humble-desktop -y
+# 安裝 Jazzy 基礎包與通訊底層
+sudo apt install ros-jazzy-ros-base ros-jazzy-rmw-fastrtps-cpp -y
 
 # 安裝 ROS 2 開發與編譯必備工具 (包含 rosdep 與 vcstool)
-sudo apt install python3-colcon-common-extensions python3-rosdep python3-vcstool -y
+sudo apt install build-essential python3-colcon-common-extensions python3-rosdep python3-vcstool -y
 ```
 
 ### 步驟 5：設定環境變數
 為了讓每次打開終端機都能直接使用 `ros2` 指令，請將其加入 `~/.bashrc`：
 ```bash
-echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
+echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
 source ~/.bashrc
 ```
 
@@ -74,17 +71,16 @@ source ~/.bashrc
 
 ## 3. 編譯 Ollie 工作區
 
-當你完成 ROS 2 安裝後，就可以來編譯本目錄 (`host/ros2_ws`) 中的原始碼了。
+當你完成 ROS 2 安裝後，就可以來編譯本目錄 (`host5b/ros2_ws`) 中的原始碼了。
 
 1. 進入工作區目錄：
    ```bash
-   cd ~/Workspace/AMROllie/host/ros2_ws
+   cd ~/Workspace/AMROllie/host5b/ros2_ws
    ```
 2. 安裝套件相依性 (rosdep)：
    ```bash
-   sudo rosdep init
-   rosdep update
-   rosdep install -i --from-path src --rosdistro humble -y
+   # 若尚未初始化請執行：sudo rosdep init && rosdep update
+   rosdep install -i --from-path src --rosdistro jazzy -y
    ```
 3. 進行編譯：
    ```bash

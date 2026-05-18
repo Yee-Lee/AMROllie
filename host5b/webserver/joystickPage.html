@@ -248,7 +248,7 @@
         // --- 優化後的發布邏輯 ---
         function publishTwist(v, w) {
             if (!isOperating || !cmdVelTopic) return;
-            // 縮短小數位數，減小 JSON 封包體積，加快 RPI3B 處理速度
+            // 縮短小數位數，減小 JSON 封包體積，加快 RPi 5B 處理速度
             const twist = new ROSLIB.Message({
                 linear : { x : parseFloat(v.toFixed(3)), y : 0.0, z : 0.0 },
                 angular : { x : 0.0, y : 0.0, z : parseFloat(w.toFixed(3)) }

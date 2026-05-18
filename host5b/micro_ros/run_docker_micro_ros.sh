@@ -7,5 +7,5 @@ docker run -it --rm \
     --net=host \
     -e ROS_DOMAIN_ID=30 \
     -v /dev:/dev \
-    microros/micro-ros-agent:humble \
+    microros/micro-ros-agent:jazzy \
     serial --dev /dev/ollie_core -b 115200

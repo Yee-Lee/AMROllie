@@ -26,31 +26,44 @@ sudo apt update && sudo apt install curl -y
 sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/index.key -o /usr/share/keyrings/ros-archive-keyring.gpg
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
 
-# 3. 安裝 ROS 2 Jazzy 基礎包
+# 3. 安裝 ROS 2 Jazzy 基礎包與編譯工具 (明確指定 rmw-fastrtps-cpp 避免底層通訊庫遺失)
 sudo apt update
-sudo apt upgrade
-sudo apt install ros-jazzy-ros-base python3-colcon-common-extensions
+sudo apt upgrade -y
+sudo apt install -y build-essential ros-jazzy-ros-base ros-jazzy-rmw-fastrtps-cpp python3-colcon-common-extensions python3-rosdep python3-vcstool
 
-# 4. 載入環境 (建議加入 ~/.bashrc)
+# 4. 初始化 rosdep (解決依賴問題必備)
+sudo rosdep init
+rosdep update
+
+# 5. 載入環境 (建議加入 ~/.bashrc)
 source /opt/ros/jazzy/setup.bash
 ```
 
-## 3. micro-ROS Agent (Jazzy 原生編譯)
+## 3. 模組編譯與設定引導
 
-由於我們偏好原生執行，且環境已從 Humble 變為 Jazzy，需要重新建立 Agent 工作區：
+在完成上述 ROS 2 Jazzy 基礎環境的安裝後，請依序前往以下各子目錄，依照其專屬的 README 說明完成套件的下載、編譯與設定。
 
-```bash
-mkdir -p ~/ollie_ws/src
-cd ~/ollie_ws/src
-git clone -b jazzy https://github.com/micro-ROS/micro_ros_setup.git
-cd ..
-rosdep update
-rosdep install --from-paths src --ignore-src -y
-colcon build
-source install/local_setup.bash
-ros2 run micro_ros_setup create_agent_ws.sh
-ros2 run micro_ros_setup build_agent.sh
-```
+> **💡 開發原則**：為了保持文件一致性，各模組的詳細編譯與使用指令皆維護在該模組目錄下。本指南僅提供執行順序。
+
+### 步驟 1：建立微控制橋樑 (micro-ROS Agent)
+請前往 `micro_ros/readme.md` 閱讀。
+- 您需要在該目錄的指引下，於專案工作區原生編譯 Agent。
+- 完成後，請務必先進行硬體通訊測試（詳見其除錯 SOP），確保能與 ESP32 正常連線。
+
+### 步驟 2：編譯光達驅動 (LD19 LiDAR)
+請前往 `ros2_ws/src/ldlidar/readme.md` 閱讀。
+- 該文件將引導您下載官方 Jazzy 相容版本的驅動原始碼，並進行 `colcon build`。
+- 包含如何透過 USB 轉 TTL 進行底層硬體裸測的說明。
+
+### 步驟 3：編譯視覺化與通訊核心 (ollie_description)
+請前往 `ros2_ws/src/ollie_description/readme.md` 閱讀。
+- 此模組負責載入 URDF 與發布 TF。由於使用的是標準 ROS 2 API，不需修改代碼，只需按照說明重新編譯即可。
+- 文件中也包含了如何透過 RViz2 進行遠端 3D 監看的詳細設定。
+
+### 步驟 4：設定手把遙控 (Joystick)
+請前往 `joystick/readme.md` 閱讀。
+- 該文件說明了如何在 RPi 5B 上安裝 Jazzy 版本的手把套件 (`joy_linux` 與 `teleop_twist_joy`)。
+- 包含藍牙配對與一鍵啟動腳本的使用方式。
 
 ## 4. ESP32 相容性說明
 
@@ -66,103 +79,4 @@ ros2 run micro_ros_setup build_agent.sh
 
 為了達到**工業化等級的穩定性與可預期性**，我們必須徹底消除系統中任何可能在背景偷偷佔用 CPU 或 I/O 的任務（如自動更新、套件快取、背景索引）。雖然 RPi 5B 效能足夠，但這些不可控的因素會導致機器人在運行導航或 SLAM 時出現突發性的延遲。
 
-> **⚠️ 警告**：這些操作會停用 Ubuntu 的自動維護機制，您的系統將完全由您手動掌控。
-
-### 5.1 徹底移除自動更新與非必要套件管理器
-Ubuntu 預設的無人值守更新與 Snapd 會在背景頻繁下載與讀寫，對邊緣運算極為不利。
-
-```bash
-# 1. 停用並移除 Snapd (Ubuntu 的沙盒套件系統，極度吃資源)
-sudo systemctl stop snapd
-sudo systemctl disable snapd
-sudo apt-get purge -y snapd
-sudo rm -rf /snap /var/snap /var/lib/snapd /var/cache/snapd
-
-# 2. 停用自動更新與非必要伺服器套件
-sudo apt-get purge -y unattended-upgrades modemmanager multipath-tools
-sudo apt-get autoremove -y
-```
-
-### 5.2 關閉耗時的背景排程與開機等待
-以下服務會在開機時卡住，或是定時在背景大量讀寫硬碟。
-
-```bash
-# 1. 關閉網路連線等待 (讓系統先開機，網路在背景慢慢連)
-sudo systemctl disable systemd-networkd-wait-online.service
-sudo systemctl mask systemd-networkd-wait-online.service
-
-# 2. 移除 Cloud-init (雲端初始化工具，開機會卡很久)
-sudo touch /etc/cloud/cloud-init.disabled
-sudo apt-get purge -y cloud-init
-sudo rm -rf /etc/cloud /var/lib/cloud
-
-# 3. 關閉耗費大量 I/O 的背景維護任務 (磁區整理、說明檔索引重建)
-sudo systemctl disable fstrim.timer man-db.timer dpkg-db-backup.timer
-sudo systemctl mask fstrim.service man-db.service dpkg-db-backup.service
-
-# 4. 關閉次要的系統檢測與派送服務
-sudo systemctl disable networkd-dispatcher.service e2scrub_reap.service rpi-eeprom-update.service
-sudo systemctl mask networkd-dispatcher.service e2scrub_reap.service rpi-eeprom-update.service
-```
-
-### 5.3 關閉雙重日誌寫入 (RSyslog)
-Systemd 已經有高效能的 `journald` 在管理二進制日誌。Ubuntu 預設又跑了一個 `rsyslog` 把日誌寫成文字檔，這對 SD 卡是雙重打擊。
-
-```bash
-sudo systemctl disable rsyslog.service
-sudo systemctl mask rsyslog.service
-```
-
-### 5.4 優化 ROS 2 網路通訊 (關閉 IPv6)
-關閉 IPv6 能有效避免 ROS 2 DDS (Data Distribution Service) 尋找節點時的延遲與封包遺失問題。
-
-```bash
-sudo sh -c 'echo "net.ipv6.conf.all.disable_ipv6 = 1" >> /etc/sysctl.conf'
-sudo sh -c 'echo "net.ipv6.conf.default.disable_ipv6 = 1" >> /etc/sysctl.conf'
-sudo sh -c 'echo "net.ipv6.conf.lo.disable_ipv6 = 1" >> /etc/sysctl.conf'
-sudo sysctl -p
-```
-
-### 5.5 保護硬碟壽命 (啟用 ZRAM 取代傳統 Swap)
-即使 RAM 很大，系統偶爾還是會分配 Swap。將 Swap 掛載在記憶體內 (ZRAM) 可以大幅減少對實體硬碟的頻繁讀寫。
-
-```bash
-sudo apt-get install -y zram-tools
-# 編輯 /etc/default/zramswap
-sudo sed -i 's/^#ALGO=.*/ALGO=lz4/' /etc/default/zramswap
-sudo sed -i 's/^#PERCENT=.*/PERCENT=50/' /etc/default/zramswap
-sudo systemctl restart zramswap
-```
-
-### 5.6 關於 CPU 效能模式 (Performance Governor)
-* **強烈建議**：如果您有安裝**官方的主動式散熱器 (Active Cooler)**，請執行以下指令鎖定 CPU 為最高頻率，確保算力穩定。
-  ```bash
-  sudo apt install cpufrequtils
-  echo 'GOVERNOR="performance"' | sudo tee /etc/default/cpufrequtils
-  sudo systemctl restart cpufrequtils
-  ```
-* **警告**：如果您沒有安裝風扇（裸機運行），請絕對不要執行上述指令，否則 RPi 5B 會過熱而發生更嚴重的降頻。
-
-### 5.7 硬體權限 (必備)
-延續 RPi 3B 的 Udev 規則。確保 `/etc/udev/rules.d/99-ollie-core.rules` 已建立，內容參考 `micro_ros/readme.md`。
-
-## 6. 手把遙控 (Jazzy)
-
-在 RPi 5B 上安裝 Jazzy 版本的手把套件：
-
-```bash
-sudo apt install ros-jazzy-joy-linux ros-jazzy-teleop-twist-joy
-```
-
-啟動方式與 RPi 3B 相同，可使用 `joystick/start_joystick.sh`。
-
-## 7. 工作區遷移與編譯
-
-現有的 `ros2_ws` 需要在 Jazzy 環境下重新編譯：
-
-```bash
-cd ~/workspace/AMROllie/host5b/ros2_ws
-rm -rf build/ install/ log/
-colcon build --symlink-install
-```
-*注意：部分套件 (如 ldlidar) 可能需要安裝 Jazzy 版本的依賴項。*
+> **💡 詳細操作**：請前往並參閱 `docs/optimize_system.md`，依照裡面的 5 個階段執行系統優化指令。設定完成後，您可以利用 `systemd/system_optimize/check_optimizations.sh` 腳本來驗證優化結果。

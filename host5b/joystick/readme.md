@@ -1,12 +1,12 @@
 # Ollie AMR - PS4 手把遙控開發與部署指南
 
-本文件記錄了 Ollie 專案中，如何設定 PS4 手把並將其訊號轉換為 `/cmd_vel` 控制指令。內容涵蓋了在 UTM 虛擬機的初步測試，以及實際部署至 RPI3B 實體機的 USB 與藍牙連線對照指南。
+本文件記錄了 Ollie 專案中，如何設定 PS4 手把並將其訊號轉換為 `/cmd_vel` 控制指令。內容涵蓋了在 UTM 虛擬機的初步測試，以及實際部署至 RPi 5B 實體機的 USB 與藍牙連線對照指南。
 
 ## 1. 運行環境架構對照
 
 在開發與實際運行的過程中，我們會跨越兩種不同的硬體環境。兩者的軟體指令完全相同，最大差異在於實體連接與延遲表現：
 
-| 項目 | 開發測試環境 (UTM 虛擬機) | 正式部署環境 (RPI3B 實體機) |
+| 項目 | 開發測試環境 (UTM 虛擬機) | 正式部署環境 (RPi 5B 實體機) |
 | :--- | :--- | :--- |
 | **主要定位** | 驗證 YAML 參數邏輯與 ROS 通訊架構 | 實際安裝於 Ollie 車體，進行實車遙控 |
 | **硬體連接** | Mac USB 實體線 ➔ UTM USB 裝置直通 | USB 直連 或 **藍牙無線連線** |
@@ -18,9 +18,9 @@
 
 ### 2.1 USB 實體連接
 - **UTM 環境**：將手把接上 Mac 後，點擊 UTM 頂部工具列的 USB 圖示，勾選 `Wireless Controller` 以直通進 Ubuntu。
-- **RPI3B 環境**：直接將手把透過 USB 線插入樹莓派即可。
+- **RPi 5B 環境**：直接將手把透過 USB 線插入樹莓派即可。
 
-### 2.2 藍牙無線配對 (RPI3B 實機部署推薦)
+### 2.2 藍牙無線配對 (RPi 5B 實機部署推薦)
 ⚠️ **注意：系統預設將藍牙關閉，請在使用前先將其開啟。**
 您可以直接執行提供的腳本 `./enable_bluetooth.sh`，或手動執行指令將其開啟（例如 `sudo rfkill unblock bluetooth` 與 `sudo systemctl start bluetooth`）。
 
@@ -36,7 +36,7 @@
    connect XX:XX:XX:XX:XX:XX
    ```
    *連線成功後，手把燈條會轉為恆亮（通常為藍色）。輸入 `exit` 離開控制台。*
-6. **自動連線機制**：因已設定 `trust`，未來只要 RPI3B 開機，隨時按下 **PS 鍵** 即可自動喚醒並連線，無需重新配對。
+6. **自動連線機制**：因已設定 `trust`，未來只要 RPi 5B 開機，隨時按下 **PS 鍵** 即可自動喚醒並連線，無需重新配對。
 
 ### 2.3 系統底層驗證 (Linux)
 在開始 ROS 測試前，需確認 Ubuntu 核心是否已成功掛載硬體裝置（無論是 USB 或藍牙）。
@@ -56,9 +56,9 @@ jstest /dev/input/js0
 ## 3. ROS 2 遙控節點配置
 
 ### 3.1 安裝核心套件
-為了確保在 RPI3B 的無頭模式 (Headless) 下能穩定運作，強烈建議捨棄預設的 `joy` 套件，改用直接讀取 Linux 底層的 `joy_linux`。
+為了確保在 RPi 5B 的無頭模式 (Headless) 下能穩定運作，強烈建議捨棄預設的 `joy` 套件，改用直接讀取 Linux 底層的 `joy_linux`。
 ```bash
-sudo apt install ros-humble-joy-linux ros-humble-teleop-twist-joy
+sudo apt install ros-jazzy-joy-linux ros-jazzy-teleop-twist-joy
 ```
 
 ### 3.2 建立配置文件 `ps4_config.yaml`
@@ -138,7 +138,7 @@ wait $JOY_PID $TELEOP_PID
    - **解決**：確認 `ps4_config.yaml` 頂層為 `/**:`，並確認啟動時有正確加上 `--params-file` 參數。若使用啟動腳本，請確認 yaml 檔與腳本放置於同一個資料夾。
 3. **在 UTM 測試時感覺搖桿延遲很長**
    - **原因**：跨系統的 USB Passthrough 輪詢延遲。
-   - **解決**：此為虛擬機硬傷。轉移至 RPI3B 實體機並使用藍牙連線後，延遲問題將自動消失。
+   - **解決**：此為虛擬機硬傷。轉移至 RPi 5B 實體機並使用藍牙連線後，延遲問題將自動消失。
 
 ---
 *Created for Project Ollie (AMR).*

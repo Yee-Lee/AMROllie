@@ -44,7 +44,7 @@ python3 test_lidar.py
 請先用以下指令查看 `ld19.launch.py` 的內容，看看它是怎麼定義 `port_name` 的：
 
 ```bash
-cat ~/workspace/AMROllie/host/ros2_ws/src/ldlidar_stl_ros2/launch/ld19.launch.py
+cat ~/workspace/AMROllie/host5b/ros2_ws/src/ldlidar_stl_ros2/launch/ld19.launch.py
 ```
 
 通常在 ROS 2 的 Python launch 檔案中，你會看到類似以下的程式碼片段（直接寫在 Launch 檔裡）：
@@ -62,7 +62,7 @@ Node(
 )
 ```
 
-**解決辦法**：請使用 `nano` 或你習慣的編輯器打開該檔案，將 `'/dev/ttyUSB0'` 改為 `'/dev/ollie-lidar'`。
+**解決辦法**：請使用 `vim` 或你習慣的編輯器打開該檔案，將 `'/dev/ttyUSB0'` 改為 `'/dev/ollie-lidar'`。
 
 ---
 
@@ -72,7 +72,7 @@ Node(
 
 **1. 載入工作區環境**
 ```bash
-cd ~/workspace/AMROllie/host/ros2_ws
+cd ~/workspace/AMROllie/host5b/ros2_ws
 source install/setup.bash
 ```
 
@@ -91,14 +91,14 @@ ros2 launch ldlidar_stl_ros2 ld19.launch.py
 **1. 下載原始碼**
 將官方原始碼 clone 到工作區的 `src` 目錄下：
 ```bash
-cd ~/workspace/AMROllie/host/ros2_ws/src
+cd ~/workspace/AMROllie/host5b/ros2_ws/src
 git clone https://github.com/ldrobotSensorTeam/ldlidar_stl_ros2.git
 ```
 
 **2. 單獨編譯套件**
 回到工作區根目錄，使用 `colcon build` 並指定只編譯雷達套件以節省時間：
 ```bash
-cd ~/workspace/AMROllie/host/ros2_ws
+cd ~/workspace/AMROllie/host5b/ros2_ws
 colcon build --packages-select ldlidar_stl_ros2
 ```
 
