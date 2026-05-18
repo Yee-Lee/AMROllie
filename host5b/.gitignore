@@ -1,0 +1,58 @@
+# ==============================
+# ROS 2 Workspace Build Files
+# ==============================
+build/
+install/
+log/
+bags/
+ros2_ws/src/micro_ros_setup/
+ros2_ws/src/micro_ros_agent/
+ros2_ws/src/uros/
+ros2_ws/src/ros2.repos
+
+# ==============================
+# Python / C++ Caches
+# ==============================
+__pycache__/
+*.py[cod]
+*$py.class
+*.o
+*.so
+
+# ==============================
+# OS Generated Files
+# ==============================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+
+# =========================
+#  3rd party library
+#  ========================
+ros2_ws/src/ldlidar_stl_ros2/
+
+# ==============================
+# AI Tool Caches & Workspaces
+# ==============================
+.gemini/
+.cursor/
+.cline/
+.aider/
+.aider.chat.history.md
+.aider.tags.cache.v3
+GEMINI.md
+.claude/
+.anthropic/
+.continue/
+.windsurf/
+claude_desktop_config.json
+
+
+# Ignore generated systemd files
+systemd/system/*.service
+systemd/system/*.timer

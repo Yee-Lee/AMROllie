@@ -1,0 +1,15 @@
+[Unit]
+Description=Ollie Visual & State Publisher (URDF/TF/Foxglove)
+After=network.target
+
+[Service]
+Type=simple
+User=<your_username>
+Environment="ROS_DOMAIN_ID=30"
+# 透過 bash -c 串聯環境變數 source 與啟動指令 (包含 TF 轉換與實體連線)
+ExecStart=/bin/bash -c "source /opt/ros/jazzy/setup.bash && source /home/<your_username>/workspace/AMROllie/host5b/ros2_ws/install/setup.bash && ros2 launch ollie_description ollie_visual.launch.py"
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.targetet

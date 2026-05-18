@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ollie AMR Dashboard</title>
+    <style>
+        :root {
+            --bg: #0a0a0a;
+            --accent: #00ff88;
+            --line: #333;
+            --text: #eee;
+            --panel-bg: rgba(20, 20, 20, 0.8);
+        }
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+        }
+        h1 {
+            color: var(--accent);
+            letter-spacing: 2px;
+            margin-bottom: 40px;
+            text-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
+            text-align: center;
+            font-size: 28px;
+        }
+        .menu-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 80%;
+            max-width: 400px;
+        }
+        .menu-btn {
+            background: var(--panel-bg);
+            color: var(--text);
+            border: 1px solid var(--line);
+            padding: 20px;
+            font-size: 18px;
+            text-align: center;
+            text-decoration: none;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            cursor: pointer;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+        .menu-btn:hover {
+            border-color: var(--accent);
+            box-shadow: 0 0 15px rgba(0, 255, 136, 0.2);
+            color: var(--accent);
+            transform: translateY(-2px);
+        }
+        .menu-btn.disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>OLLIE AMR DASHBOARD</h1>
+    <div class="menu-container">
+        <a href="joystickPage.html" class="menu-btn"><span>🕹️</span> Remote Control</a>
+        <a href="#" class="menu-btn disabled"><span>🗺️</span> Navigation (WIP)</a>
+        <a href="#" class="menu-btn disabled"><span>⚙️</span> Settings</a>
+    </div>
+</body>
+</html>
