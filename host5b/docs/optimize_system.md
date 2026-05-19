@@ -78,6 +78,21 @@ sudo sh -c 'echo "net.ipv6.conf.lo.disable_ipv6 = 1" >> /etc/sysctl.conf'
 sudo sysctl -p
 ```
 
+### 3.3 關閉 Wi-Fi 省電模式 (Power Save)
+Wi-Fi 的省電模式可能會導致連線不穩定或延遲增加，強烈建議在需要穩定通訊的環境下將其關閉。
+```bash
+# 檢查目前狀態 (如果為 on 代表省電模式開啟中)
+iw dev wlan0 get power_save
+
+# 關閉省電模式 (重啟後失效)
+sudo iw dev wlan0 set power_save off
+
+# 設定開機自動關閉 (使用 NetworkManager 永久設定)
+sudo nano /etc/NetworkManager/conf.d/default-wifi-powersave-on.conf
+# 將 wifi.powersave = 3 改為 wifi.powersave = 2，然後重啟 NetworkManager
+sudo systemctl restart NetworkManager
+```
+
 ---
 
 ## 階段 4：記憶體與穩定性管理 (ZRAM)
