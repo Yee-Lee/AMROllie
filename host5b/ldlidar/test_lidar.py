@@ -1,7 +1,7 @@
 import serial
 import time
 
-PORT = '/dev/ollie-lidar' 
+PORT = '/dev/ollie_lidar' 
 BAUD_RATE = 230400
 
 try:

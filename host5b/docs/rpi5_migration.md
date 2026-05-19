@@ -51,7 +51,7 @@ source /opt/ros/jazzy/setup.bash
 - 完成後，請務必先進行硬體通訊測試（詳見其除錯 SOP），確保能與 ESP32 正常連線。
 
 ### 步驟 2：編譯光達驅動 (LD19 LiDAR)
-請前往 `ros2_ws/src/ldlidar/readme.md` 閱讀。
+請前往 `ldlidar/readme.md` 閱讀。
 - 該文件將引導您下載官方 Jazzy 相容版本的驅動原始碼，並進行 `colcon build`。
 - 包含如何透過 USB 轉 TTL 進行底層硬體裸測的說明。
 
