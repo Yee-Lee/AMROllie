@@ -58,8 +58,14 @@ ROS 2 採用去中心化的 DDS 廣播協議，這意味著 RPi 5B **不需要**
 
 - **`micro_ros/`**：Agent 執行指南。
 - **`joystick/`**：PS4 手把遙控設定與映射。
-- **`ros2_ws/`**：ROS 2 工作區，包含雷達驅動與機器人模型。
+- **`ros2_ws/`**：ROS 2 工作區。
+  - **`src/ollie_description/`**：**(⭐ 極度重要)** 這是 Ollie 的**視覺化與座標轉換核心**。無論您是要進行實車導航 (Nav2)、建圖 (SLAM) 還是軟體模擬，都**必須**先建立並啟動此套件。它包含了 URDF 模型與座標變換 (TF) 腳本，請務必優先閱讀其中的 README。
+  - **`src/ldlidar_stl_ros2/`**：LD19 光達驅動模組。
 - **`systemd/`**：Linux 背景服務配置與自動化部署指令。
 - **`docs/`**：系統架構與優化說明文件（即本目錄）。
+  - `intro.md`: 系統架構總覽 (本文件)。
+  - `rpi5_migration.md`: 平台遷移指南。
+  - `optimize_system.md`: 系統效能優化。
+  - `simulation.md`: **RViz2 視覺化與 Fake Ollie 脫機模擬指南**。
 
 > **💡 平台遷移註記**：若您是從 RPi 3B (Humble) 升級而來，請參閱 `docs/rpi5_migration.md` 了解詳細的環境轉換與相容性檢查步驟。

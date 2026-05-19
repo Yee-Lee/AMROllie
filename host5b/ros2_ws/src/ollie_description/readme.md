@@ -1,81 +1,46 @@
-# ollie_description
+# ollie_description (機器人本體與核心座標)
 
-Ollie AMR 的視覺化與通訊核心套件。負責接收下位機 (ESP32) 的硬體狀態，轉換為 ROS 2 座標系統，並透過區域網路提供遠端 (RViz2) 3D 即時監控。
-
-## 目錄結構
-
-- `urdf/ollie.urdf` : Ollie 實體的 3D 模型藍圖 (純英文，避免解析崩潰)。
-- `scripts/real_ollie_core.py` : 里程計座標 (TF) 轉換與關節狀態 (Joint States) 推算節點。
-- `launch/ollie_visual.launch.py` : 一鍵啟動模型發布與核心轉換。
-
-## 編譯指南
-
-在工作空間的根目錄 (例如 `~/workspace/AMROllie/host5b/ros2_ws`) 執行：
-
-```bash
-# 建議加上 --symlink-install，這樣未來修改 Python 或 URDF 檔就不需要一直重新編譯
-colcon build --packages-select ollie_description --symlink-install
-```
-
-## 啟動與使用流程
-
-為了讓 Ollie 順利運作，必須先建立下位機通訊，再啟動 ROS 2 視覺化核心。
-
-### 1. 建立硬體通訊 (Terminal 1)
-
-啟動 `micro_ros_agent` 接管實體序列埠 (RPi 5B 採用 Native Build)：
-
-```bash
-export ROS_DOMAIN_ID=30
-ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ollie_core -b 115200 -v4
-```
-> 啟動後，按下 ESP32 的 **EN** 按鈕重啟，確認畫面出現綠色的連線建立日誌。
-
-### 2. 啟動視覺化核心 (Terminal 2)
-
-設定好環境變數後，啟動 Launch 檔。
-
-```bash
-export ROS_DOMAIN_ID=30
-source install/setup.bash
-ros2 launch ollie_description ollie_visual.launch.py
-```
-
-### 3. RViz2 遠端監看
-
-由於 ROS 2 使用 DDS，只要處於同一個區網下，您可以在 Mac 或 PC 端直接開啟 RViz2：
-1. 確保電腦端的 `ROS_DOMAIN_ID=30`。
-2. 執行 `rviz2`。
-3. 在左側面版新增 `RobotModel` 與 `TF` 等視圖。
-4. 將 Global Options 的 **Fixed Frame** 設為 `odom`。
-5. 轉動實體輪胎，畫面即會同步更新。
+本套件是 Ollie AMR 的視覺化與通訊核心，負責載入實體模型 (URDF) 並發布靜態/動態座標轉換 (TF)。它是所有導航 (Nav2)、建圖 (SLAM) 與模擬任務的基礎。
 
 ---
 
-## 常用除錯指令
+## 1. 什麼是 URDF？如何建立？
 
-在新的終端機分頁中，必須先執行 `export ROS_DOMAIN_ID=30` 才能與 Ollie 通訊。
+URDF (Unified Robot Description Format) 是 ROS 中用來描述機器人實體結構的標準 XML 格式。
+在我們的專案中，URDF 檔案位於：`urdf/ollie.urdf`。
 
-### 檢查資料發布頻率 (Hz)
-確保里程計傳輸順暢 (健康指標約為 20Hz)：
+**建立與修改 URDF 的重點：**
+1. **`base_link` (基準連桿)**：這是機器人的核心座標系（通常位於底盤中心）。所有的零件都是相對於這個中心點展開的。
+2. **Link (連桿)**：代表機器的剛體部件，例如輪子 (`left_wheel`, `right_wheel`)、光達 (`laser_link`) 等。
+3. **Joint (關節)**：定義 Link 之間的連接方式。例如輪子使用 `continuous` 關節來允許無限旋轉，而光達使用 `fixed` 關節固定在底盤上。
+4. **維護建議**：若您未來要修改機器人外觀、改變光達高度，或新增超音波感測器，請直接編輯 `ollie.urdf`。修改時請確保 `<joint>` 的 XYZ 偏移量 (Origin) 與實際車體的實體距離相符（單位為公尺）。
+
+---
+
+## 2. 編譯與啟動 (真實環境)
+
+當您修改了 URDF 或是剛 Clone 完專案後，需要編譯 `ollie_description` 套件讓系統抓到最新的模型。
+
+**1. 編譯套件**
+請在終端機中，從專案根目錄進入 `ros2_ws` 並執行編譯。強烈建議加上 `--symlink-install`，這樣未來修改 URDF 或 Python 檔後不需重新編譯即可生效：
 ```bash
-ros2 topic hz /odom
+cd ros2_ws
+colcon build --packages-select ollie_description --symlink-install
+source install/setup.bash
 ```
 
-### 檢視即時數據
-查看底盤傳來的精確坐標與速度：
+**2. 啟動機器人狀態發布**
+啟動 Launch 檔，這會讀取 URDF 並啟動 `robot_state_publisher`，將機器人的靜態結構廣播到 ROS 2 系統中。
 ```bash
-ros2 topic echo /odom
+ros2 launch ollie_description ollie_visual.launch.py
 ```
 
-### 歸零里程計 (重設 Odom)
-呼叫 Service 將下位機的累積里程計瞬間歸零 (需 ESP32 韌體端有實作 `reset_odom_callback`)：
-```bash
-ros2 service call /reset_odom std_srvs/srv/Trigger
-```
+---
 
-### 遙控車體 (Teleop)
-啟動鍵盤控制節點，發送 `/cmd_vel` 指令給 ESP32：
-```bash
-ros2 run teleop_twist_keyboard teleop_twist_keyboard
-```
+## 3. 視覺化與脫機模擬 (Simulation)
+
+> 💡 **需要進行 RViz 視覺化測試或軟體模擬？**
+> 
+> 關於如何安裝並使用 RViz2 查看 3D 模型，以及如何在不連接實體 ESP32 的情況下，使用 `fake_ollie` 進行純軟體的脫機模擬，我們已經將這些內容整理在獨立的教學文件中。
+> 
+> 👉 請參閱：[Ollie 視覺化與脫機模擬指南](../../../../docs/simulation.md)
