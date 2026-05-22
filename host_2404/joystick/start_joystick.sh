@@ -3,12 +3,11 @@
 echo "🎮 啟動 Ollie 的 PS4 手把遙控節點..."
 
 # 取得目前腳本所在的絕對路徑，確保 yaml 檔能被正確找到
-# 假設 ps4_config.yaml 跟這個腳本放在同一個目錄下
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 CONFIG_FILE="$SCRIPT_DIR/ps4_config.yaml"
 
-# 啟動 joy_linux_node 在背景執行
-ros2 run joy_linux joy_linux_node --ros-args -p dev:=/dev/input/js0 &
+# 【修正】使用正確的相容參數名稱：coalesce_interval (單位：秒)
+ros2 run joy_linux joy_linux_node --ros-args -p dev:=/dev/input/js0 -p coalesce_interval:=0.1 -p deadzone:=0.2 &
 JOY_PID=$!
 
 # 啟動 teleop_node 在背景執行
