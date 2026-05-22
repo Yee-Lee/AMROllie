@@ -1,126 +1,130 @@
 #!/usr/bin/env python3
+"""
+AMROllie Watchdog Node v3.0
+--------------------------
+此節點負責監控 ESP32 (Micro-ROS) 的連線狀態。
+技術註記：
+由於 ROS 2 Jazzy 在 ESP32 與主機間存在 Type Hash 不匹配問題 (INVALID Hash)，
+傳統的訂閱回調 (Subscription Callback) 無法觸發。
+因此，本節點採用「拓樸監控模式」(Topology Monitoring)，透過偵測 DDS 發布者是否存在來判斷狀態。
+"""
+
+import os
+import time
+import subprocess
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 from nav_msgs.msg import Odometry
-import subprocess
-import time
-import os
 
 class OllieWatchdogNode(Node):
     def __init__(self):
-        super().__init__('ollie_watchdog_node')
+        # 使用包含 PID 的節點名稱以避免衝突
+        node_name = f'ollie_watchdog_{os.getpid()}'
+        super().__init__(node_name)
         
-        # --- Watchdog 參數設定 ---
-        self.warning_threshold = 10.0 # 10秒沒收到資料發出警告
-        self.restart_threshold = 15.0 # 15秒沒收到資料觸發重啟
-        self.check_interval = 1.0     # 每秒檢查一次
-        self.retry_interval = 20.0    # 離線狀態下，每隔幾秒再次嘗試重啟 (稍微放寬)
-        self.target_service = "ollie_microros.service"
+        # --- 宣告 ROS 2 參數 (可透過 launch 或命令行覆寫) ---
+        self.declare_parameter('restart_threshold', 15.0)  # 判定失蹤並觸發重啟的秒數
+        self.declare_parameter('check_interval', 2.0)     # 掃描拓樸圖的頻率
+        self.declare_parameter('target_service', 'ollie_microros.service')
+        self.declare_parameter('topic_name', '/odom')
         
-        # 初始化狀態
-        self.last_msg_time = time.time()
-        self.is_restarting = False
-        self.is_offline = True  # 預設為離線，直到收到第一筆資料才改為正常
-        self.has_warned = False # 是否已針對當前斷訊發出過警告
+        # 取得參數值
+        self.restart_threshold = self.get_parameter('restart_threshold').value
+        self.check_interval = self.get_parameter('check_interval').value
+        self.target_service = self.get_parameter('target_service').value
+        self.topic_name = self.get_parameter('topic_name').value
         
-        # 建立與硬體匹配的 QoS Profile (Reliable + Volatile)
-        qos_profile = QoSProfile(
-            reliability=ReliabilityPolicy.RELIABLE,
-            history=HistoryPolicy.KEEP_LAST,
-            depth=10,
-            durability=DurabilityPolicy.VOLATILE
+        # 初始化內部狀態
+        self.last_alive_time = time.time()
+        self.is_offline = True
+        self.restart_count = 0
+        
+        # 建立定時監控任務
+        self.timer = self.create_timer(self.check_interval, self.monitor_cycle)
+        
+        # 建立一個嘗試性的訂閱 (雖因 Hash 問題通常無效，但保留作為極端情況下的信號)
+        self.sub = self.create_subscription(
+            Odometry, self.topic_name, self.odom_callback, 10
         )
         
-        # 訂閱 /odom
-        self.create_subscription(
-            Odometry, 
-            '/odom', 
-            self.odom_callback, 
-            qos_profile
-        )
-        
-        # 建立定時檢查器
-        self.timer = self.create_timer(self.check_interval, self.check_timeout)
-        
-        # 取得並顯示目前的 ROS_DOMAIN_ID
-        domain_id = os.environ.get('ROS_DOMAIN_ID', '未設定 (預設 0)')
-        self.get_logger().info(f"🛡️ Ollie 守門員已啟動！")
-        self.get_logger().info(f"🌐 目前 ROS_DOMAIN_ID: {domain_id}")
-        self.get_logger().info(f"⏰ 設定 - 警告: {self.warning_threshold}s, 重啟: {self.restart_threshold}s")
-        self.get_logger().info(f"⏳ 等待 Odom 數據中...")
+        # 啟動資訊
+        domain_id = os.environ.get('ROS_DOMAIN_ID', '30')
+        self.get_logger().info("==========================================")
+        self.get_logger().info(f"🛡️ AMROllie Watchdog v3.0 已啟動")
+        self.get_logger().info(f"🌐 ROS_DOMAIN_ID: {domain_id}")
+        self.get_logger().info(f"🔍 監控話題: {self.topic_name}")
+        self.get_logger().info(f"⏰ 重啟閾值: {self.restart_threshold}s")
+        self.get_logger().info(f"🛠️ 目標服務: {self.target_service}")
+        self.get_logger().info("==========================================")
 
-    def odom_callback(self, msg):
-        # 如果原本是離線或剛重啟完，現在收到資料了，就印出「恢復通訊」的明確訊息
+    def odom_callback(self, _msg):
+        """若底層通訊突然匹配，此回調能提供最即時的活躍訊號"""
+        self.update_alive_status("CALLBACK")
+
+    def monitor_cycle(self):
+        """核心監控循環：檢查發布者是否存在"""
+        try:
+            publishers_info = self.get_publishers_info_by_topic(self.topic_name)
+            pub_count = len(publishers_info)
+            
+            if pub_count > 0:
+                self.update_alive_status("TOPOLOGY")
+            else:
+                self.handle_absence()
+                
+        except Exception as e:
+            self.get_logger().error(f"監控循環發生異常: {str(e)}")
+
+    def update_alive_status(self, source):
+        """更新活躍時間並處理狀態轉換"""
+        now = time.time()
+        self.last_alive_time = now
+        
         if self.is_offline:
-            self.get_logger().info("✅ 系統通訊正常！開始接收 /odom 數據。")
+            self.get_logger().info(f"✅ [SUCCESS] 偵測到發布者恢復連線 (來源: {source})")
             self.is_offline = False
 
-        # 只要收到資料，就更新最後收到訊息的時間
-        self.last_msg_time = time.time()
-        self.is_restarting = False
-        self.has_warned = False # 重置警告狀態
-
-    def check_timeout(self):
-        if self.is_restarting:
-            return  # 正在重啟中，先不檢查
-            
-        elapsed_time = time.time() - self.last_msg_time
+    def handle_absence(self):
+        """處理發布者失蹤的情況"""
+        elapsed = time.time() - self.last_alive_time
         
-        # 第一階段：警告 (10s)
-        if elapsed_time > self.warning_threshold and not self.has_warned and not self.is_offline:
-            self.get_logger().warn(f"⚠️ 注意：已經 {elapsed_time:.1f} 秒未收到 /odom 資料...")
-            self.has_warned = True
+        # 每 6 秒打印一次警告，避免洗板
+        self.get_logger().warn(
+            f"⚠️ [WARNING] 找不到 {self.topic_name} 發布者！(已失蹤 {elapsed:.1f}s)", 
+            throttle_duration_sec=6.0
+        )
+        
+        if elapsed > self.restart_threshold:
+            self.get_logger().error(f"🚨 [CRITICAL] 斷訊時間達 {elapsed:.1f}s，執行重啟程序...")
+            self.trigger_restart()
 
-        # 第二階段：重啟 (15s)
-        if elapsed_time > self.restart_threshold:
-            if not self.is_offline:
-                # 原本連線正常，突然斷線：觸發重啟
-                self.get_logger().error(f"🚨 嚴重：{elapsed_time:.1f} 秒未收到數據，準備重啟 {self.target_service} ...")
-                self.is_offline = True
-                self.is_restarting = True
-                self.restart_microros()
-            else:
-                # 已經是離線狀態，檢查是否超過再次重啟的閾值
-                if elapsed_time > self.retry_interval:
-                    self.get_logger().error(f"⚠️ 離線狀態持續 {elapsed_time:.1f} 秒，再次嘗試重啟 {self.target_service} ...")
-                    self.is_restarting = True
-                    self.restart_microros()
-                else:
-                    self.get_logger().info(f"⏳ 持續等待 /odom 恢復中... (已斷線 {elapsed_time:.1f} 秒)", throttle_duration_sec=5.0)
-
-    def restart_microros(self):
+    def trigger_restart(self):
+        """執行系統服務重啟"""
         try:
-            self.get_logger().info("🔄 正在執行 systemctl restart...")
+            self.restart_count += 1
+            self.get_logger().info(f"🔄 [RESTART #{self.restart_count}] 正在重啟 {self.target_service}...")
             
-            # 紀錄到專屬日誌檔
-            log_msg = f"[{time.ctime()}] Watchdog triggered restart of {self.target_service} due to Odom timeout.\n"
-            try:
-                with open("/var/log/ollie_watchdog.log", "a") as f:
-                    f.write(log_msg)
-            except Exception as log_e:
-                self.get_logger().warn(f"無法寫入日誌檔 /var/log/ollie_watchdog.log: {log_e}")
-
-            # 服務現在以 root 執行，不需要 sudo
-            subprocess.run(["systemctl", "restart", self.target_service], check=True)
-            self.get_logger().info("🔄 服務重啟命令發送成功！給予 10 秒寬限期等待 Micro-ROS Agent 啟動...")
-            time.sleep(10.0)  # 給 Agent 一點時間啟動與重連
-        except subprocess.CalledProcessError as e:
-            self.get_logger().error(f"❌ 重啟服務失敗: {e}")
-        finally:
-            self.last_msg_time = time.time()  # 重置計時器
-            self.is_restarting = False
+            # 使用 Popen 異步執行，避免阻塞 Watchdog 自身
+            subprocess.Popen(["systemctl", "restart", self.target_service])
+            
+            # 重設計時器並標記為離線
+            self.last_alive_time = time.time()
+            self.is_offline = True
+            
+        except Exception as e:
+            self.get_logger().error(f"重啟服務失敗: {str(e)}")
 
 def main(args=None):
     rclpy.init(args=args)
     node = OllieWatchdogNode()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
