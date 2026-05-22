@@ -34,8 +34,9 @@ for TEMPLATE_FILE in *.template; do
         # 取代 /home/<your_username>/workspace/AMROllie/host_2404 為腳本上一層 (host_2404) 的絕對路徑
         HOST_DIR="$(dirname "$SCRIPT_DIR")"
         
-        sed -e "s|<your_username>|$CURRENT_USER|g" \
-            -e "s|/home/<your_username>/workspace/AMROllie/host_2404|$HOST_DIR|g" \
+        sed -e "s|/home/<your_username>/workspace/AMROllie/host_2404|$HOST_DIR|g" \
+            -e "s|<your_username>|$CURRENT_USER|g" \
+            -e "s|<ros_domain_id>|$TARGET_DOMAIN_ID|g" \
             "$TEMPLATE_FILE" > "$SERVICE_FILE"
     fi
 done
@@ -66,6 +67,9 @@ sudo systemctl daemon-reload
 
 echo "----------------------------------"
 echo "✅ Installation successful!"
+echo "Note: Ensure your udev rules are installed for hardware devices."
+echo "Check /etc/udev/rules.d/99-ollie.rules for ollie_core and ollie_lidar."
+echo ""
 echo "You can now enable and start the services. Example:"
 echo "  sudo systemctl enable --now ollie_microros.service"
 echo "  sudo systemctl enable --now ollie_watchdog.service"

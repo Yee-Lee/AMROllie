@@ -1,11 +1,12 @@
 [Unit]
 Description=Ollie Micro-ROS Agent (ESP32 Bridge)
-After=network.target
+After=network.target dev-ollie_core.device
+BindsTo=dev-ollie_core.device
 
 [Service]
 Type=simple
 User=<your_username>
-Environment="ROS_DOMAIN_ID=30"
+Environment="ROS_DOMAIN_ID=<ros_domain_id>"
 Restart=always
 RestartSec=5
 # 啟動原生編譯的 micro-ROS agent，使用 udev 綁定的 /dev/ollie_core

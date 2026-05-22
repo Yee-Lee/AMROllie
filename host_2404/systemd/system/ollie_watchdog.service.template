@@ -6,7 +6,7 @@ Wants=ollie_microros.service
 [Service]
 Type=simple
 User=root
-Environment="ROS_DOMAIN_ID=30"
+Environment="ROS_DOMAIN_ID=<ros_domain_id>"
 Environment="PYTHONUNBUFFERED=1"
 ExecStart=/bin/bash -c "source /opt/ros/jazzy/setup.bash && /home/<your_username>/workspace/AMROllie/host_2404/systemd/ollie_watchdog_node.py"
 Restart=always
