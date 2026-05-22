@@ -1,0 +1,74 @@
+# Ollie AMR 上位機系統架構 (Ubuntu 24.04 + ROS 2 Jazzy)
+
+本文件旨在說明 Ollie 專案中，上位機 (Host) 的系統定位、硬體配置、通訊機制以及核心軟體架構。
+
+> **💡 硬體通用性聲明**：
+> 本目錄 (`host_2404`) 的架構與腳本完全基於 **Ubuntu 24.04 LTS** 與 **ROS 2 Jazzy** 開發。雖然下文中的說明與舉例皆以我們的參考配置 **Raspberry Pi 5B** 為主，但這些軟體架構與最佳化腳本**完全適用於任何支援運行 Ubuntu 24.04 的單板電腦 (如 RPi 4B, Orange Pi 等) 或標準 x86 PC**。
+
+## 1. 系統定位與設計哲學
+
+在 Ollie 的雙層架構中，採用高效能單板電腦提供強大的運算效能，支撐複雜的 SLAM 與導航：
+- **上位機 (Host)**：負責耗費資源的「高階運算」與「決策」。包含但不限於：ROS 2 Jazzy 系統運行、micro-ROS 代理、SLAM 建圖、Nav2 導航、感測器資料融合以及搖桿訊號解析。
+- **下位機 (ESP32)**：專注於「高即時性」的底層硬體控制。包含馬達 PID 控制、超音波防撞、IMU 姿態解算與真實里程計 (Odometry) 計算。
+
+## 2. 硬體架構與外接設備 (以 RPi 5B 為例)
+
+上位機作為車體的核心樞紐，其周邊連接了以下主要硬體設備：
+1. **下位機控制板 (ESP32)**：透過 USB 轉 TTL 模組進行通訊（固定映射為 `/dev/ollie_core`）。
+2. **LD19 光達 (LiDAR)**：透過 USB 轉接板連接，提供 2D 雷射掃描數據（固定映射為 `/dev/ollie_lidar`）。
+3. **PS4 藍牙手把**：用於實車手動遙控 (Teleop)。
+4. **主動式散熱器 (Active Cooler)**：若使用 RPi 5B 等高效能主機板，必須配備散熱器以維持長時間高負載運作。
+
+## 3. 軟體環境與基礎設施
+
+- **作業系統**：Ubuntu 24.04 LTS
+- **ROS 版本**：ROS 2 Jazzy Jalisco
+- **通訊方式**：原生編譯執行 (Native Build) 以獲得最佳效能。
+- **進程管理**：Linux `systemd` (確保核心服務開機自啟與崩潰重啟)
+
+## 4. 上下位機通訊機制
+
+上位機與 ESP32 之間採用 **micro-ROS** 架構，達成原生的 Topic/Service 傳遞。
+
+- **實體層**：UART 序列通訊，鮑率設定為 `115200`。
+- **代理層 (Agent)**：上位機執行原生 `micro-ros-agent`，並指定 `ROS_DOMAIN_ID=30`。
+- **資料流向**：
+  - **Host -> ESP32**：發送速度指令 (`/cmd_vel`)、服務請求 (`/reset_odom`)。
+  - **ESP32 -> Host**：接收里程計 (`/odom` 與 TF)、超音波測距。
+
+## 5. 遠端視覺化與網路機制 (RViz2)
+
+ROS 2 採用去中心化的 DDS 廣播協議，這意味著上位機 **不需要**運行任何網頁伺服器或橋接程式 (Bridge)。只要符合 以下條件，您的開發機就能自動接收機器人資料：
+
+1. **同網段**：Mac/PC 必須與上位機處於同一個區域網路。
+2. **相同 Domain ID**：這是最關鍵的一步。在開發機開啟 RViz2 之前，**必須**在其終端機設定環境變數：
+   ```bash
+   export ROS_DOMAIN_ID=30
+   rviz2
+   ```
+   *(💡 強烈建議將 `export ROS_DOMAIN_ID=30` 加入您開發機的 `~/.bashrc` 或 `~/.zshrc` 中，以免每次手動輸入。)*
+
+## 6. 核心軟體模組與 Systemd 服務
+
+核心模組被拆分為獨立的背景服務 (`/etc/systemd/system/`)：
+
+1. **`ollie_microros.service`**：啟動 micro-ROS Agent 橋接。
+2. **`ollie_description.service`**：載入 URDF 並發布 TF 座標。
+3. **`ollie_lidar.service`**：啟動 LD19 光達節點。
+4. **`ollie_watchdog.service`**：監控系統健康狀態。
+
+## 6. 目錄結構與模組詳情
+
+- **`micro_ros/`**：Agent 執行指南。
+- **`joystick/`**：PS4 手把遙控設定與映射。
+- **`ros2_ws/`**：ROS 2 工作區。
+  - **`src/ollie_description/`**：**(⭐ 極度重要)** 這是 Ollie 的**視覺化與座標轉換核心**。無論您是要進行實車導航 (Nav2)、建圖 (SLAM) 還是軟體模擬，都**必須**先建立並啟動此套件。它包含了 URDF 模型與座標變換 (TF) 腳本，請務必優先閱讀其中的 README。
+  - **`src/ldlidar_stl_ros2/`**：LD19 光達驅動模組。
+- **`systemd/`**：Linux 背景服務配置與自動化部署指令。
+- **`docs/`**：系統架構與優化說明文件（即本目錄）。
+  - `intro.md`: 系統架構總覽 (本文件)。
+  - `rpi5_migration.md`: 平台遷移指南。
+  - `optimize_system.md`: 系統效能優化。
+  - `simulation.md`: **RViz2 視覺化與 Fake Ollie 脫機模擬指南**。
+
+> **💡 平台遷移註記**：若您是從 RPi 3B (Humble) 升級而來，請參閱 `docs/rpi5_migration.md` 了解詳細的環境轉換與相容性檢查步驟。
