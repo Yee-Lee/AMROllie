@@ -3,14 +3,16 @@
 # AMROllie Systemd Service Installer
 # 此腳本會根據當前環境路徑與使用者，將 .template 轉換為實際的 .service，並註冊到系統中。
 
-# 獲取絕對路徑與使用者名稱
+# 獲取絕對路徑與使用者名稱，以及 ROS_DOMAIN_ID
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 SYSTEMD_DIR="$SCRIPT_DIR/system"
 CURRENT_USER=$(whoami)
+TARGET_DOMAIN_ID=${ROS_DOMAIN_ID:-30}
 
 echo "--- AMROllie Systemd Installer ---"
 echo "Target User: $CURRENT_USER"
 echo "Target Path: $SCRIPT_DIR"
+echo "Target ROS Domain ID: $TARGET_DOMAIN_ID"
 echo "----------------------------------"
 
 # 檢查 system 目錄是否存在

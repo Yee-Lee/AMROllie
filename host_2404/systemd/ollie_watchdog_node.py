@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 from nav_msgs.msg import Odometry
 import subprocess
 import time
+import os
 
 class OllieWatchdogNode(Node):
     def __init__(self):
@@ -22,12 +24,31 @@ class OllieWatchdogNode(Node):
         self.is_offline = True  # 預設為離線，直到收到第一筆資料才改為正常
         self.has_warned = False # 是否已針對當前斷訊發出過警告
         
-        # 訂閱 /odom (使用 ROS 2 預設的 Reliable QoS，Queue Depth = 10)
-        self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
+        # 建立與硬體匹配的 QoS Profile (Reliable + Volatile)
+        qos_profile = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=10,
+            durability=DurabilityPolicy.VOLATILE
+        )
+        
+        # 訂閱 /odom
+        self.create_subscription(
+            Odometry, 
+            '/odom', 
+            self.odom_callback, 
+            qos_profile
+        )
         
         # 建立定時檢查器
         self.timer = self.create_timer(self.check_interval, self.check_timeout)
-        self.get_logger().info(f"🛡️ Ollie 守門員已啟動！(警告: {self.warning_threshold}s, 重啟: {self.restart_threshold}s) 等待 Odom 數據中...")
+        
+        # 取得並顯示目前的 ROS_DOMAIN_ID
+        domain_id = os.environ.get('ROS_DOMAIN_ID', '未設定 (預設 0)')
+        self.get_logger().info(f"🛡️ Ollie 守門員已啟動！")
+        self.get_logger().info(f"🌐 目前 ROS_DOMAIN_ID: {domain_id}")
+        self.get_logger().info(f"⏰ 設定 - 警告: {self.warning_threshold}s, 重啟: {self.restart_threshold}s")
+        self.get_logger().info(f"⏳ 等待 Odom 數據中...")
 
     def odom_callback(self, msg):
         # 如果原本是離線或剛重啟完，現在收到資料了，就印出「恢復通訊」的明確訊息
@@ -72,7 +93,7 @@ class OllieWatchdogNode(Node):
         try:
             self.get_logger().info("🔄 正在執行 systemctl restart...")
             
-            # 紀錄到專屬日誌檔 (如 readme.md 所述)
+            # 紀錄到專屬日誌檔
             log_msg = f"[{time.ctime()}] Watchdog triggered restart of {self.target_service} due to Odom timeout.\n"
             try:
                 with open("/var/log/ollie_watchdog.log", "a") as f:
