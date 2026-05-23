@@ -1,77 +1,74 @@
 # Ollie SLAM 建圖系統 (Slam Toolbox)
 
 本目錄包含 Ollie 機器人進行 2D 空間建圖（SLAM）的相關設定與啟動腳本。
-我們使用 ROS2 的 `slam_toolbox` 搭配非同步線上模式 (`online_async`) 進行建圖，適合 Ubuntu 24.04 上位機 (Host) 執行。
+我們使用 ROS 2 Jazzy 的 `slam_toolbox` 搭配非同步線上模式 (`online_async`) 進行建圖。
 
 ## 1. 系統依賴與安裝
 
-在上位機 (Host) 上執行建圖前，請確保已安裝必要的 ROS2 套件：
+在上位機 (Host) 上執行建圖前，請確保已安裝必要的 ROS 2 套件：
 ```bash
 sudo apt update
-sudo apt install ros-$ROS_DISTRO-slam-toolbox
-sudo apt install ros-$ROS_DISTRO-navigation2 ros-$ROS_DISTRO-nav2-bringup
+sudo apt install ros-jazzy-slam-toolbox
+sudo apt install ros-jazzy-navigation2 ros-jazzy-nav2-bringup
 ```
 
 ## 2. 啟動建圖流程
 
-為了確保 `slam_toolbox` 能正確辨識 Ollie 的實體座標（`base_link`），我們使用本目錄下的自定義啟動腳本與參數檔。
-
-### Step 2.1 啟動底層感測器與控制
-在啟動 SLAM 之前，請確認以下節點已正常運行：
-1. **ESP32 (micro-ROS agent)**：提供輪式里程計 `/odom` 與 `/tf` 座標轉換。
-2. **LiDAR 驅動**：提供雷射點雲 `/scan`。
-3. **Robot State Publisher**：透過 URDF 發佈 `base_link` 到各感測器（如雷射、車輪等）的靜態 TF 轉換。
-
-### Step 2.2 啟動 SLAM 節點
-執行本目錄下的專屬啟動腳本，此腳本會載入正確的參數：
+### 2.1 啟動 SLAM 節點
+本目錄的 `ollie_slam_launch.py` 已整合 **Lifecycle 自動化邏輯**。啟動後會自動進行 `Configure` 與 `Activate`，無需手動輸入指令。
 
 ```bash
-# 確保已進入工作目錄並 source 環境
-cd ~/Workspace/AMROllie/host_2404/slam/
+cd ~/workspace/AMROllie/host_2404/slam/
 ros2 launch ollie_slam_launch.py
 ```
 
-### Step 2.3 開始建圖
-1. 在開發機（或遠端連接的電腦）上啟動 RViz2。
-2. 加入 `Map`、`LaserScan` 與 `TF` 插件以觀察建圖狀態。
-3. 使用 PS4 手把以**低速**遙控 Ollie 繞行空間，完成環境探索。
+**啟動成功的標誌：**
+- 終端機顯示 `[slam_toolbox]: Activating`。
+- 執行 `ros2 topic list` 應能看到 `/map` 话题。
 
-### Step 2.4 儲存地圖
-當建圖完成後，建立 `maps` 目錄（如果不存在）並執行以下指令將地圖存檔：
+### 2.2 在 RViz2 中觀察
+1. 在遠端開發機開啟 RViz2。
+2. **Global Options**: 將 `Fixed Frame` 設定為 `map`。
+3. **Add 插件**:
+   - **Map**: 話題選擇 `/map`。
+   - **LaserScan**: 話題選擇 `/scan`。
+   - **RobotModel**: 觀察車體位置。
+
+### 2.3 儲存地圖
+當建圖完成後，執行以下指令將地圖存檔：
+
 ```bash
-mkdir -p ~/Workspace/AMROllie/host_2404/slam/maps
-ros2 run nav2_map_server map_saver_cli -f ~/Workspace/AMROllie/host_2404/slam/maps/my_home_map
+# 建立目錄
+mkdir -p ~/workspace/AMROllie/host_2404/slam/maps
+
+# 執行存檔 (注意：路徑大小寫必須正確)
+ros2 run nav2_map_server map_saver_cli -f ~/workspace/AMROllie/host_2404/slam/maps/my_home_map
 ```
 
 ---
 
-## 3. 常見問題與除錯紀錄 (Troubleshooting)
+## 3. 進階參數說明 (`mapper_params.yaml`)
 
-### 問題：無法建圖且出現 `[WARN] Failed to compute odom pose`
-**現象描述**：
-SLAM 啟動後，RViz2 未顯示地圖，且終端機持續跳出警告訊息 `Failed to compute odom pose`。
+- **解析度 (Resolution)**: 目前設定為 `0.03` (3cm)，提供更精細的邊緣。
+- **更新頻率**: `map_update_interval` 為 `2.0` 秒，讓 Rviz 顯示更即時。
+- **參數類型**: ROS 2 嚴格要求類型匹配（例如 `scan_buffer_maximum_scan_distance: 10.0` 必須帶小數點）。
 
-**除錯與驗證步驟**：
-1. 首先，檢查 TF 座標樹的連通性：
-   ```bash
-   ros2 run tf2_tools view_frames
-   ```
-   確認座標樹是否能正確連起 `map` -> `odom` -> `base_link` -> `base_laser`。如果樹狀結構完整但仍報錯，進入下一步。
+---
 
-2. 檢查 `slam_toolbox` 的內部參數，確認它嘗試尋找的車體座標系名稱：
-   ```bash
-   ros2 param get /slam_toolbox base_frame
-   ```
-   **根本原因**：如果上述指令回傳 `String value is: base_footprint`，表示預設設定檔與 Ollie 的實際設計衝突。Ollie 的 URDF 定義車體中心為 `base_link`，導致 SLAM 演算法找不到正確的座標系而卡死。
+## 4. 常見問題與除錯 (Troubleshooting)
 
-**解決方案**：
-已建立自定義的參數設定檔 `mapper_params.yaml`，確保檔案中包含以下結構來覆蓋預設值：
-```yaml
-slam_toolbox:
-  ros__parameters:
-    odom_frame: odom
-    map_frame: map
-    base_frame: base_link  # 修正為正確的車體坐標系名稱
-```
+### 如何針對 Launch 進行 Debug？
+如果啟動後看不到 `/map`，請依照以下順序檢查 Launch 終端機的輸出：
+1. **檢查啟動 Log**: 查看 `Caught exception in callback`。
+   - 如果提到 `Wrong parameter type`，代表 `mapper_params.yaml` 裡的數字格式錯誤（整數/浮點數不分）。
+2. **檢查 Lifecycle 狀態**: 執行 `ros2 node info /slam_toolbox`。
+   - 如果沒看到 Publishers 包含 `/map`，代表節點卡在 `Unconfigured` 狀態。
+3. **檢查 TF 樹**: 執行 `ros2 run tf2_tools view_frames`。
+   - 必須確保 `map -> odom -> base_link -> base_laser` 完整連通。
 
-並透過自定義的 `ollie_slam_launch.py` 強制載入此設定檔。
+### 訊息丟棄警告 (Message Filter dropping message)
+**現象**：看到 `discarding message because the queue is full`。
+**原因**：計算量（3cm 解析度）大於處理速度，導致緩存區滿載。
+**解決**：移動機器人時請保持緩慢，或在參數中增加 `throttle_scans` 數值以跳幀處理。
+
+

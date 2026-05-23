@@ -13,8 +13,8 @@ slam_toolbox:
     debug_logging: false
     throttle_scans: 1
     transform_publish_period: 0.02
-    map_update_interval: 5.0
-    resolution: 0.05
+    map_update_interval: 2.0
+    resolution: 0.03
     max_laser_range: 20.0
     minimum_time_interval: 0.5
     transform_timeout: 0.2
@@ -28,7 +28,7 @@ slam_toolbox:
     minimum_travel_distance: 0.1
     minimum_travel_heading: 0.1
     scan_buffer_size: 10
-    scan_buffer_maximum_scan_distance: 10
+    scan_buffer_maximum_scan_distance: 10.0
     link_match_maximum_distance: 2.0
     link_scan_maximum_distance: 1.5
     loop_search_maximum_distance: 3.0
@@ -38,8 +38,8 @@ slam_toolbox:
     loop_match_minimum_response_co_variance: 1.0
     loop_match_maximum_response_co_variance: 0.1
     correlation_search_space_dimension: 0.5
-    correlation_search_space_resolution: 0.01
-    correlation_search_space_smear_deviation: 0.1
+    correlation_search_space_resolution: 0.005
+    correlation_search_space_smear_deviation: 0.03
 
     # Scan Matcher Parameters
     distance_variance_penalty: 0.5
