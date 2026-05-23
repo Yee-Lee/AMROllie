@@ -22,7 +22,10 @@ def generate_launch_description():
             executable='robot_state_publisher',
             name='robot_state_publisher',
             output='screen',
-            parameters=[{'robot_description': robot_desc}],
+            parameters=[{
+                'robot_description': robot_desc,
+                'use_sim_time': False
+            }],
         ),
         # 3. 啟動 Fake Ollie Core (發布假資料)
  #       Node(
