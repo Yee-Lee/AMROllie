@@ -381,10 +381,12 @@ void taskROS(void *pvParameters) {
 
             case AGENT_CONNECTED:
                 // 狀態機：Agent 已連線，處理通訊與時間同步
-                if (!rmw_uros_epoch_synchronized()) {
+                {
                     unsigned long now = millis();
-                    if (now - last_sync_try > 1000) {
-                        (void)rmw_uros_sync_session(10);
+                    // 無論是否已經對時過，每 5 秒都強制重新對時一次
+                    // 解決 RPi 連上網路被 NTP 校時後，ESP32 仍發佈舊時間導致 TF 延遲的問題
+                    if (now - last_sync_try > 5000) {
+                        (void)rmw_uros_sync_session(1000); // 增加 Timeout 到 1000ms，確保在傳輸高負載時不會因為漏封包而永遠失去同步
                         last_sync_try = now;
                     }
                 }
