@@ -2,7 +2,7 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, GroupAction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -37,13 +37,15 @@ def generate_launch_description():
     nav2_launch_file = os.path.join(nav2_bringup_dir, 'launch', 'bringup_launch.py')
 
     # Include the bringup launch file
+    # NOTE: autostart='true' is key to trigger LifecycleManager
     nav2_bringup_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(nav2_launch_file),
         launch_arguments={
             'map': map_yaml_file,
             'use_sim_time': use_sim_time,
             'params_file': params_file,
-            'autostart': 'true'
+            'autostart': 'true',
+            'use_composition': 'False' # Disable composition to make debugging easier on RPi
         }.items()
     )
 
