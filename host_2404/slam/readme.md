@@ -14,17 +14,20 @@ sudo apt install ros-jazzy-navigation2 ros-jazzy-nav2-bringup
 
 ## 2. 啟動建圖流程
 
+我們提供了便捷腳本來簡化啟動與存檔流程。
+
 ### 2.1 啟動 SLAM 節點
-本目錄的 `ollie_slam_launch.py` 已整合 **Lifecycle 自動化邏輯**。啟動後會自動進行 `Configure` 與 `Activate`，無需手動輸入指令。
+執行本目錄下的 `start_slam.sh`。該腳本會進入正確目錄並啟動 `ollie_slam_launch.py`。
+`ollie_slam_launch.py` 已整合 **Lifecycle 自動化邏輯**，啟動後會自動進行 `Configure` 與 `Activate`。
 
 ```bash
 cd ~/workspace/AMROllie/host_2404/slam/
-ros2 launch ollie_slam_launch.py
+./start_slam.sh
 ```
 
 **啟動成功的標誌：**
 - 終端機顯示 `[slam_toolbox]: Activating`。
-- 執行 `ros2 topic list` 應能看到 `/map` 话题。
+- 執行 `ros2 topic list` 應能看到 `/map` 話題。
 
 ### 2.2 在 RViz2 中觀察
 1. 在遠端開發機開啟 RViz2。
@@ -35,14 +38,17 @@ ros2 launch ollie_slam_launch.py
    - **RobotModel**: 觀察車體位置。
 
 ### 2.3 儲存地圖
-當建圖完成後，執行以下指令將地圖存檔：
+當建圖完成並對效果滿意後，執行 `save_map.sh` 進行存檔。
+該腳本會自動在 `slam/` 下建立 `maps/` 目錄，並以當前時間命名地圖文件（例如：`map_20240523_143000.yaml`）。
 
 ```bash
-# 建立目錄
-mkdir -p ~/workspace/AMROllie/host_2404/slam/maps
+cd ~/workspace/AMROllie/host_2404/slam/
+./save_map.sh
+```
 
-# 執行存檔 (注意：路徑大小寫必須正確)
-ros2 run nav2_map_server map_saver_cli -f ~/workspace/AMROllie/host_2404/slam/maps/my_home_map
+*(進階參考) 手動存檔指令：*
+```bash
+ros2 run nav2_map_server map_saver_cli -f ~/workspace/AMROllie/host_2404/slam/maps/my_custom_name
 ```
 
 ---
@@ -70,5 +76,3 @@ ros2 run nav2_map_server map_saver_cli -f ~/workspace/AMROllie/host_2404/slam/ma
 **現象**：看到 `discarding message because the queue is full`。
 **原因**：計算量（3cm 解析度）大於處理速度，導致緩存區滿載。
 **解決**：移動機器人時請保持緩慢，或在參數中增加 `throttle_scans` 數值以跳幀處理。
-
-
