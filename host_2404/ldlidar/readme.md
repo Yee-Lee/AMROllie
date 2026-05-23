@@ -108,3 +108,21 @@ source install/setup.bash
 ros2 launch ldlidar_stl_ros2 ld19.launch.py
 ```
 啟動成功後，雷達會持續發布 `sensor_msgs/msg/LaserScan` 訊息至 `/scan` 話題，你可以在另一個終端機使用 `ros2 topic echo /scan` 或是開啟 RViz2 進行 3D 視覺化確認。
+
+---
+
+## 6. LiDAR 距離過濾器 (濾除 16cm 內干擾)
+
+若機器人支架擋住雷達前方，可套用本目錄下的過濾配置：
+
+1. **安裝套件**：`sudo apt-get install ros-jazzy-laser-filters`
+2. **參考模板**：參考本目錄下的 `ld19_filtered.launch.py.template` 修改 `src/ldlidar_stl_ros2/launch/ld19.launch.py`。
+3. **核心修改**：
+   - 將驅動節點的 `topic_name` 參數改為 `scan_raw`。
+   - 新增 `laser_filters` 節點，並將其 `scan_filtered` 話題重新對應回 `scan`。
+   - 設定檔路徑指向 `~/Workspace/AMROllie/host_2404/ldlidar/range_filter.yaml`。
+
+### 驗證方式
+- **話題列表**：確認同時存在 `/scan_raw` 與 `/scan`。
+- **數值比對**：遮擋雷達（<16cm），`scan_raw` 應有小數值，而 `scan` 對應角度應為 `nan`。
+- **RViz2 可視化**：同時加入兩個話題，確認近距離紅色點（raw）存在但白色點（filtered）消失。

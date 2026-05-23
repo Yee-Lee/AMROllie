@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+import os
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch_ros.actions import Node
+
+def generate_launch_description():
+    # 注意：請確保此路徑指向你機器人上的實際位置 
+    filter_config = os.path.expanduser('<your_path_to_filter_config>/range_filter.yaml')
+
+    ldlidar_node = Node(
+        package='ldlidar_stl_ros2',
+        executable='ldlidar_stl_ros2_node',
+        name='LD19',
+        output='screen',
+        parameters=[
+            {'product_name': 'LDLiDAR_LD19'},
+            {'topic_name': 'scan_raw'},  # 原始話題重新命名為 scan_raw
+            {'frame_id': 'base_laser'},
+            {'port_name': '/dev/ollie_lidar'},
+            {'port_baudrate': 230400},
+            {'laser_scan_dir': True},
+            {'enable_angle_crop_func': False}
+        ]
+    )
+
+    laser_filter_node = Node(
+        package='laser_filters',
+        executable='scan_to_scan_filter_chain',
+        name='laser_filter',
+        parameters=[filter_config],
+        remappings=[
+            ('scan', 'scan_raw'),        # 輸入端對接 scan_raw
+            ('scan_filtered', 'scan')    # 輸出端維持 scan 供系統使用
+        ]
+    )
+
+    base_link_to_laser_tf_node = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='base_link_to_base_laser_ld19',
+        arguments=['0','0','0.18','0','0','0','base_link','base_laser']
+    )
+
+    return LaunchDescription([
+        ldlidar_node,
+        laser_filter_node,
+        base_link_to_laser_tf_node
+    ])
