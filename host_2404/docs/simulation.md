@@ -6,28 +6,13 @@
 
 ---
 
-## 1. 安裝 RViz2 與視覺化測試
+## 1. RViz2 遠端監控平台
 
-RViz2 是 ROS 2 的官方 3D 視覺化工具。您可以在樹莓派本地或同網段的開發機 (Mac/PC) 上開啟。
+RViz2 是 ROS 2 的官方 3D 視覺化工具。為了獲得最佳體驗，我們通常在遠端筆電上執行 RViz2，而不是在機器人本地。
 
-**1. 安裝 RViz2** 
-*(如果您使用的是 Ubuntu Desktop 的 full 版本通常已內建，否則請手動安裝)*：
-```bash
-sudo apt update
-sudo apt install -y ros-jazzy-rviz2
-```
+關於 RViz2 的**詳細安裝步驟、元件配置 (RobotModel, Odom, TF)、以及通訊偵錯 (QoS/DDS)**，請參閱獨立的文件目錄：
 
-**2. 啟動與設定**
-確保您已經執行了實體車或模擬的 Launch 檔，接著開啟一個**新的終端機**：
-```bash
-export ROS_DOMAIN_ID=30
-rviz2
-```
-
-**RViz2 設定步驟：**
-1. 在左下角點擊 **Add** -> 選擇 **RobotModel** 即可看到 Ollie 的 3D 外觀。
-2. 點擊 **Add** -> 選擇 **TF** 可以看見各個關節的坐標軸。
-3. 在左上角的 **Fixed Frame** 欄位，手動輸入 `odom` 或 `base_link`。
+👉 **[RViz2 遠端監控指南](../rviz2/readme.md)**
 
 ---
 
