@@ -113,16 +113,37 @@ ros2 launch ldlidar_stl_ros2 ld19.launch.py
 
 ## 6. LiDAR 距離過濾器 (濾除 16cm 內干擾)
 
-若機器人支架擋住雷達前方，可套用本目錄下的過濾配置：
+由於機器人支架或底盤結構可能擋住雷達部分視野，導致近距離出現假障礙物。我們使用 `laser_filters` 插件來濾除 16cm 以內的無效數據。
 
-1. **安裝套件**：`sudo apt-get install ros-jazzy-laser-filters`
-2. **參考模板**：參考本目錄下的 `ld19_filtered.launch.py.template` 修改 `src/ldlidar_stl_ros2/launch/ld19.launch.py`。
-3. **核心修改**：
+相關配置檔案位於 `ldlidar/filter/` 目錄下：
+- `range_filter.yaml`: 過濾器參數設定（將 16cm 內數值替換為 `inf`）。
+- `check_lidar_filter.py`: 用於驗證過濾器是否生效的檢測腳本。
+
+### 設定步驟
+
+1. **安裝過濾器套件**：
+   ```bash
+   sudo apt-get install ros-jazzy-laser-filters
+   ```
+
+2. **套用 Launch 設定**：
+   參考本目錄下的 `ld19_filtered.launch.py.template` 來修改或替換你的啟動檔。
    - 將驅動節點的 `topic_name` 參數改為 `scan_raw`。
-   - 新增 `laser_filters` 節點，並將其 `scan_filtered` 話題重新對應回 `scan`。
-   - 設定檔路徑指向 `~/Workspace/AMROllie/host_2404/ldlidar/range_filter.yaml`。
+   - 新增 `laser_filters` 節點，將 `scan_filtered` 話題重新對應為 `/scan`。
+   - 確認設定檔路徑正確指向 `ldlidar/filter/range_filter.yaml`。
 
-### 驗證方式
-- **話題列表**：確認同時存在 `/scan_raw` 與 `/scan`。
-- **數值比對**：遮擋雷達（<16cm），`scan_raw` 應有小數值，而 `scan` 對應角度應為 `nan`。
-- **RViz2 可視化**：同時加入兩個話題，確認近距離紅色點（raw）存在但白色點（filtered）消失。
+### 驗證過濾效果
+
+我們提供了一個自動化腳本來比對 `/scan_raw` (原始數據) 與 `/scan` (過濾後數據) 的差異。
+
+**執行驗證腳本：**
+1. 確保雷達與過濾器節點皆已啟動。
+2. 執行以下指令：
+   ```bash
+   cd ldlidar/filter
+   python3 check_lidar_filter.py
+   ```
+
+**預期輸出：**
+- `[Raw < 16cm]`: 應顯示偵測到的近距離點數。
+- `[Filtered < 16cm]`: 應顯示 `✓ 完美切除`。如果顯示 `⚠️ X 點殘留`，請檢查 `range_filter.yaml` 的閾值設定。

@@ -1,0 +1,13 @@
+laser_filter:
+#scan_to_scan_filter_chain:
+  ros__parameters:
+    filter1:
+      name: range_filter
+      type: laser_filters/LaserScanRangeFilter
+      params:
+        use_message_range_limits: false
+        lower_threshold: 0.16
+        upper_threshold: 12.0
+        # 💡 將這兩行改成 .inf
+        lower_replacement_value: .inf
+        upper_replacement_value: .inf
