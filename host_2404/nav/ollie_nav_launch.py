@@ -45,7 +45,7 @@ def generate_launch_description():
             'use_sim_time': use_sim_time,
             'params_file': params_file,
             'autostart': 'true',
-            'use_composition': 'False', # Disable composition to make debugging easier on RPi
+            'use_composition': 'True',
             'use_collision_monitor': 'True'
         }.items()
     )

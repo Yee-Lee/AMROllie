@@ -2,7 +2,11 @@ amcl:
   ros__parameters:
     use_sim_time: False
     set_initial_pose: True
-    initial_pose: [0.0, 0.0, 0.0, 0.0]
+    initial_pose:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+      yaw: 0.0
     alpha1: 0.2
     alpha2: 0.2
     alpha3: 0.2
@@ -322,3 +326,15 @@ docking_server:
       docking_threshold: 0.05
       staging_x_offset: -0.5
       use_battery_status: False
+
+lifecycle_manager_localization:
+  ros__parameters:
+    use_sim_time: False
+    autostart: True
+    node_names: ['map_server', 'amcl']
+
+lifecycle_manager_navigation:
+  ros__parameters:
+    use_sim_time: False
+    autostart: True
+    node_names: ['controller_server', 'smoother_server', 'planner_server', 'behavior_server', 'bt_navigator', 'waypoint_follower', 'velocity_smoother', 'collision_monitor']
