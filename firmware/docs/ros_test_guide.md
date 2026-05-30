@@ -40,7 +40,7 @@ docker run -it --rm \
   --net=host --privileged \
   -v /dev:/dev \
   -e ROS_DOMAIN_ID=30 \
-  microros/micro-ros-agent:humble serial --dev /dev/ttyUSB0 -b 115200
+  microros/micro-ros-agent:jazzy serial --dev /dev/ttyUSB0 -b 115200
 ```
 
 > **注意**：啟動後，若遲遲未見連線，請按一下 ESP32 板子上的 `EN/RST` 重置按鈕，直到看見綠色的 `session established` 訊息。

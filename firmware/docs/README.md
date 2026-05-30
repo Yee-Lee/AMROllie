@@ -85,7 +85,7 @@
 4.  **AGENT_DISCONNECTED**：確認斷線。呼叫 `destroy_entities()` 釋放所有 ROS 資源，清除殘留的速度快取，隨後重置計時器並回到 `WAITING_AGENT`。
 
 ### Topic 與 Service 定義 (與 QoS 策略)
-為了與 ROS 2 的標準節點 (如 Nav2, RViz2 等) 完美相容並避免 QoS Mismatch (服務品質不匹配) 導致的拒收問題，各主題的 QoS 設定如下：
+為了與 ROS 2 的標準節點 (如 Nav2, RViz2 等) 完美相容並避免 QoS Mismatch (服務品質不匹配) 導致的拒收問題，系統已切換至 **ROS 2 Jazzy Jalisco (LTS)** 版本，各主題的 QoS 設定如下：
 
 - **Publisher**:
   - `/odom` (nav_msgs/Odometry, 包含四元數轉換)：**Reliable (預設 QoS)**。確保關鍵的軌跡推算資料不遺漏。注意：**目前 TF (odom -> base_link) 轉換由上位機負責，下位機不主動廣播 /tf**。
