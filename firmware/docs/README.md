@@ -80,7 +80,7 @@
 
 ### 狀態機流轉邏輯
 1.  **WAITING_AGENT**：低頻 (每 3 秒) Ping 測試 Agent。若等待超過 **30 秒** 無回應，自動觸發 `ESP.restart()` 避免系統假死。
-2.  **AGENT_CONNECTED**：正常通訊。執行 `rclc_executor_spin_some` 與 20Hz 的定時器 (發布 Odom 與超音波資料)，並進行時間同步 (`rmw_uros_sync_session`)。
+2.  **AGENT_CONNECTED**：正常通訊。執行 `rclc_executor_spin_some` 與 **10Hz** 的定時器 (發布 Odom 與超音波資料)，並進行時間同步 (`rmw_uros_sync_session`)。
 3.  **AGENT_LOSING**：當 Ping 失敗時進入此緩衝期 (Debounce)。持續 **5 秒** (每秒 Ping 一次) 嘗試恢復連線，期間觸發 Core 0 的零秒煞停。
 4.  **AGENT_DISCONNECTED**：確認斷線。呼叫 `destroy_entities()` 釋放所有 ROS 資源，清除殘留的速度快取，隨後重置計時器並回到 `WAITING_AGENT`。
 
@@ -88,8 +88,7 @@
 為了與 ROS 2 的標準節點 (如 Nav2, RViz2 等) 完美相容並避免 QoS Mismatch (服務品質不匹配) 導致的拒收問題，各主題的 QoS 設定如下：
 
 - **Publisher**:
-  - `/odom` (nav_msgs/Odometry, 包含四元數轉換)：**Reliable (預設 QoS)**。確保關鍵的軌跡推算資料不遺漏，並符合上位機對 Odometry 的標準要求。
-  - `/tf` (tf2_msgs/TFMessage)：**Reliable (預設 QoS)**。發布 `odom` 至 `base_link` 的座標轉換 (Transform)。為避免微控制器動態記憶體配置 (malloc) 導致碎片化，底層實作採用靜態陣列 (`tf_array[1]`) 預先綁定指標。
+  - `/odom` (nav_msgs/Odometry, 包含四元數轉換)：**Reliable (預設 QoS)**。確保關鍵的軌跡推算資料不遺漏。注意：**目前 TF (odom -> base_link) 轉換由上位機負責，下位機不主動廣播 /tf**。
   - `/sonar/left`, `/sonar/right` (sensor_msgs/Range)：**Best Effort QoS**。感測器高頻資料允許偶爾丟包，藉此降低 UART 頻寬佔用。
 - **Subscriber**:
   - `/cmd_vel` (geometry_msgs/Twist)：**Best Effort QoS**。網路壅塞時直接處理最新速度指令，不重傳舊指令，確保即時性。
