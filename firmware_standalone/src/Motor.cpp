@@ -13,7 +13,8 @@ Motor::Motor(int in1, int in2, int pwm, int encA, int encB, int cpr, bool revers
     : _pinIN1(in1), _pinIN2(in2), _pinPWM(pwm),
       _pinEncA(encA), _pinEncB(encB),
       _cpr(cpr), _isReversed(reverse), _updateInterval(interval),
-      _pos(0), _currRPM(0), _lastUpdate(0) {
+      _pos(0), _currRPM(0), _lastUpdate(0),
+      _lastLogTime(0), _accumulatedTicks(0), _isrCount(0), _enableDebug(false) {
 
     _ledcChannel = next_ledc_channel++;
 }
@@ -33,6 +34,7 @@ void IRAM_ATTR Motor::isrWrapper(void* arg) {
     bool forward = (stateA == stateB) ^ instance->_isReversed;
     
     instance->_pos += forward ? 1 : -1;
+    instance->_isrCount++;
 }
 
 void Motor::init() {
@@ -70,6 +72,17 @@ bool Motor::update() {
         // 簡單的一階低通濾波，平滑轉速數據並過濾極端跳變
         if (abs(rawRPM) < 2000.0f) {
             _currRPM = (_currRPM * 0.7f) + (rawRPM * 0.3f);
+        }
+
+        // 當啟用 Debug 時，累積 ticks 並定期打印編碼器資訊與計算的 RPM
+        if (_enableDebug) {
+            _accumulatedTicks += count;
+            if (now - _lastLogTime >= 500) {
+                Serial.printf("[Motor PinA:%d] Ticks(500ms): %ld | ISR Count: %lu | rawRPM: %.2f | filteredRPM: %.2f\n", 
+                              _pinEncA, _accumulatedTicks, _isrCount, rawRPM, _currRPM);
+                _accumulatedTicks = 0;
+                _lastLogTime = now;
+            }
         }
 
         _lastUpdate = now;
@@ -114,4 +127,8 @@ void Motor::stop() {
     digitalWrite(_pinIN1, LOW);
     digitalWrite(_pinIN2, LOW);
     ledcWrite(_ledcChannel, 0);
+}
+
+void Motor::setDebug(bool enable) {
+    _enableDebug = enable;
 }

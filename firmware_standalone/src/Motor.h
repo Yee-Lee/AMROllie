@@ -27,6 +27,11 @@ private:
     unsigned long _lastUpdate;
     portMUX_TYPE _mux = portMUX_INITIALIZER_UNLOCKED;
 
+    unsigned long _lastLogTime;
+    long _accumulatedTicks;
+    volatile unsigned long _isrCount;
+    bool _enableDebug;
+
     static void IRAM_ATTR isrWrapper(void* arg);
 
 public:
@@ -38,6 +43,7 @@ public:
     float getCurrRPM() override;
     void drive(int pwm) override;
     void stop() override;
+    void setDebug(bool enable);
 };
 
 #endif

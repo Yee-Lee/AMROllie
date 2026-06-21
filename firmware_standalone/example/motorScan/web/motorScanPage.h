@@ -151,7 +151,7 @@ static const char motorscan_html[] PROGMEM = R"rawliteral(
                 if(e.data.startsWith("D,")) {
                     const parts = e.data.split(",");
                     if(parts.length < 5) return;
-                    const rpm = parseFloat(parts[2]), pwm = parts[3], sState = parts[4], timeS = ((Date.now() - startTime)/1000);
+                    const rpm = Math.abs(parseFloat(parts[2])), pwm = parts[3], sState = parts[4], timeS = ((Date.now() - startTime)/1000);
                     document.getElementById('scannerState').textContent = sState;
                     const row = document.createElement('div');
                     row.className = 'term-row';

@@ -29,6 +29,10 @@ void setup() {
     leftMotor.init();
     rightMotor.init();
 
+    // 啟用編碼器與 RPM 調試打印
+    leftMotor.setDebug(true);
+    rightMotor.setDebug(true);
+
     // 初始化並啟動網頁伺服器
     webServer.begin(WIFI_SSID, WIFI_PASSWORD);
     indexPage.attachToServer(webServer.getServer());

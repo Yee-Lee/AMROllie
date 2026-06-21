@@ -26,14 +26,14 @@ const char* WIFI_PASSWORD = "mimabarge8";
 #define MOTOR_L_IN1 12
 #define MOTOR_L_IN2 14
 #define MOTOR_L_PWM 13
-#define MOTOR_L_ENC_A 18
+#define MOTOR_L_ENC_A 19
 #define MOTOR_L_ENC_B 34
 
 // 右馬達 (Right Motor)
 #define MOTOR_R_IN1 27
 #define MOTOR_R_IN2 26
 #define MOTOR_R_PWM 25
-#define MOTOR_R_ENC_A 19
+#define MOTOR_R_ENC_A 18
 #define MOTOR_R_ENC_B 35
 
 // 超音波感測器 (Ultrasonic Sensors)
@@ -46,8 +46,8 @@ const char* WIFI_PASSWORD = "mimabarge8";
 // 實體機構參數 (Physical Mechanics)
 // ========================================
 #define WHEEL_DIAMETER 0.065f // 輪徑 (m)
-#define WHEEL_BASE     0.135f // 輪距 (m)
-#define MOTOR_CPR      292    // 馬達編碼器解析度 (CPR)
+#define WHEEL_BASE     0.335f // 輪距 (m)
+#define MOTOR_CPR      2340    // 馬達編碼器解析度 (CPR)
 
 // ========================================
 // 控制器與 PID 參數 (Control & PID)
