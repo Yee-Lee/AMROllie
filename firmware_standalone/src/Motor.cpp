@@ -78,8 +78,11 @@ bool Motor::update() {
         if (_enableDebug) {
             _accumulatedTicks += count;
             if (now - _lastLogTime >= 500) {
-                Serial.printf("[Motor PinA:%d] Ticks(500ms): %ld | ISR Count: %lu | rawRPM: %.2f | filteredRPM: %.2f\n", 
-                              _pinEncA, _accumulatedTicks, _isrCount, rawRPM, _currRPM);
+                int valIN1 = digitalRead(_pinIN1);
+                int valIN2 = digitalRead(_pinIN2);
+                uint32_t valPWM = ledcRead(_ledcChannel);
+                Serial.printf("[Motor PinA:%d] Ticks(500ms): %ld | ISR Count: %lu | rawRPM: %.2f | filteredRPM: %.2f | Pins: [IN1:%d, IN2:%d, PWM:%u]\n", 
+                              _pinEncA, _accumulatedTicks, _isrCount, rawRPM, _currRPM, valIN1, valIN2, valPWM);
                 _accumulatedTicks = 0;
                 _lastLogTime = now;
             }

@@ -57,7 +57,7 @@ void loop() {
     // 2. 處理掃描狀態機切換
     static int lastState = 0;
     if (scanPage.state != lastState) {
-        if (scanPage.state == 1 && !scanPage.manualMode) scanner.begin(currentMotor);
+        if (scanPage.state == 1 && !scanPage.manualMode) scanner.begin(currentMotor, scanPage.backMode);
         else { scanner.reset(); currentMotor->stop(); }
         lastState = scanPage.state;
     }
@@ -72,6 +72,8 @@ void loop() {
     static unsigned long lastPush = 0;
     if (scanPage.state == 1 && millis() - lastPush > 50) {
         lastPush = millis();
-        scanPage.broadcastData(millis(), currentMotor->getCurrRPM(), scanner.getCurrentPWM(), (scanner.getScannerState() == MotorScanner::SCAN) ? "SCAN" : "DONE");
+        int actualPWM = scanner.getCurrentPWM();
+        if (scanPage.backMode) actualPWM = -actualPWM;
+        scanPage.broadcastData(millis(), currentMotor->getCurrRPM(), actualPWM, (scanner.getScannerState() == MotorScanner::SCAN) ? "SCAN" : "DONE");
     }
 }

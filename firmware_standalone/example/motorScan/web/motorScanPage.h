@@ -58,9 +58,9 @@ static const char motorscan_html[] PROGMEM = R"rawliteral(
         .term-val-pwm { color: var(--accent); flex: 1; text-align: right; flex-shrink: 0; }
 
         .footer-row { display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; padding-top: 5px; }
-        .manual-test { display: flex; align-items: center; font-size: 0.85rem; width: 140px; }
+        .manual-test { display: flex; align-items: center; font-size: 0.85rem; width: 240px; }
         .btn-container { flex: 1; display: flex; justify-content: center; }
-        .placeholder { width: 140px; }
+        .placeholder { width: 240px; }
         
         button { 
             padding: 8px 40px; font-size: 1rem; cursor: pointer; border: none; border-radius: 6px; 
@@ -115,9 +115,15 @@ static const char motorscan_html[] PROGMEM = R"rawliteral(
         </div>
 
         <div class="footer-row">
-            <div class="manual-test">
-                <input type="checkbox" id="manualCheck" style="width:16px; height:16px; cursor:pointer; margin:0;">
-                <label for="manualCheck" style="margin-left:6px; color:var(--text-dim); cursor:pointer;">Manual Test</label>
+            <div class="manual-test" style="display: flex; gap: 15px; justify-content: flex-start;">
+                <div style="display: flex; align-items: center;">
+                    <input type="checkbox" id="manualCheck" style="width:16px; height:16px; cursor:pointer; margin:0;">
+                    <label for="manualCheck" style="margin-left:6px; color:var(--text-dim); cursor:pointer; white-space: nowrap;">Manual Test</label>
+                </div>
+                <div style="display: flex; align-items: center;">
+                    <input type="checkbox" id="backCheck" style="width:16px; height:16px; cursor:pointer; margin:0;">
+                    <label for="backCheck" style="margin-left:6px; color:var(--text-dim); cursor:pointer; white-space: nowrap;">Back</label>
+                </div>
             </div>
             <div class="btn-container">
                 <button id="stateBtn" class="btn-idle" onclick="toggleState()">START SYSTEM</button>
@@ -170,16 +176,17 @@ static const char motorscan_html[] PROGMEM = R"rawliteral(
 
         function toggleState() {
             isRunning = !isRunning;
-            const btn = document.getElementById('stateBtn'), stateText = document.getElementById('systemState'), scanText = document.getElementById('scannerState'), manualCheck = document.getElementById('manualCheck');
+            const btn = document.getElementById('stateBtn'), stateText = document.getElementById('systemState'), scanText = document.getElementById('scannerState');
+            const manualCheck = document.getElementById('manualCheck'), backCheck = document.getElementById('backCheck');
             if(isRunning) {
-                motorSelect.disabled = true; manualCheck.disabled = true; motorLockMsg.style.display = "inline";
+                motorSelect.disabled = true; manualCheck.disabled = true; backCheck.disabled = true; motorLockMsg.style.display = "inline";
                 startTime = Date.now(); terminal.innerHTML = ''; chart.data.datasets[0].data = [];
                 chart.options.scales.x.min = 0; chart.options.scales.x.max = 40; chart.update();
-                ws.send("STATE,1," + (manualCheck.checked ? "1" : "0"));
+                ws.send("STATE,1," + (manualCheck.checked ? "1" : "0") + "," + (backCheck.checked ? "1" : "0"));
                 stateText.textContent = "RUNNING"; stateText.style.color = "#10b981";
                 btn.textContent = "Stop System"; btn.className = "btn-running";
             } else {
-                motorSelect.disabled = false; manualCheck.disabled = false; motorLockMsg.style.display = "none";
+                motorSelect.disabled = false; manualCheck.disabled = false; backCheck.disabled = false; motorLockMsg.style.display = "none";
                 ws.send("STATE,0"); stateText.textContent = "IDLE"; stateText.style.color = "#94a3b8"; scanText.textContent = "IDLE";
                 btn.textContent = "Start System"; btn.className = "btn-idle";
             }
@@ -194,6 +201,7 @@ class MotorScanPage {
 public:
     volatile int state = 0; // 0: IDLE, 1: RUNNING
     volatile bool manualMode = false;
+    volatile bool backMode = false;
     volatile int selectedMotorIdx = 0;
     volatile bool motorChangedFlag = true;
 
@@ -205,9 +213,22 @@ public:
                 data[len] = '\0';
                 String msg = (char*)data;
                 if (msg.startsWith("STATE,")) {
-                    int commaIdx = msg.indexOf(',', 6);
-                    this->state = msg.substring(6, commaIdx != -1 ? commaIdx : msg.length()).toInt();
-                    if (commaIdx != -1) this->manualMode = (msg.substring(commaIdx + 1).toInt() == 1);
+                    int firstComma = msg.indexOf(',', 6);
+                    if (firstComma == -1) {
+                        this->state = msg.substring(6).toInt();
+                        this->manualMode = false;
+                        this->backMode = false;
+                    } else {
+                        this->state = msg.substring(6, firstComma).toInt();
+                        int secondComma = msg.indexOf(',', firstComma + 1);
+                        if (secondComma == -1) {
+                            this->manualMode = (msg.substring(firstComma + 1).toInt() == 1);
+                            this->backMode = false;
+                        } else {
+                            this->manualMode = (msg.substring(firstComma + 1, secondComma).toInt() == 1);
+                            this->backMode = (msg.substring(secondComma + 1).toInt() == 1);
+                        }
+                    }
                 } else if (msg.startsWith("MOTOR,")) {
                     int newIdx = msg.substring(6).toInt();
                     if (newIdx != this->selectedMotorIdx) {

@@ -22,18 +22,20 @@ private:
     int _endPWM;
     int _stepSize;
     int _interval;
+    bool _reverse;
 
 public:
     MotorScanner(IMotor* motor = nullptr) : _motor(motor), _currentPWM(0), _timerStart(0), _scannerState(IDLE),
-                                            _startPWM(100), _endPWM(255), _stepSize(5), _interval(500) {}
+                                            _startPWM(100), _endPWM(255), _stepSize(5), _interval(500), _reverse(false) {}
 
-    void begin(IMotor *motor) {
+    void begin(IMotor *motor, bool reverse = false) {
         _motor = motor;
+        _reverse = reverse;
         _currentPWM = _startPWM;
         _timerStart = millis();
         _scannerState = SCAN;
-        Serial.println("Scanner Begin");
-        if (_motor) _motor->drive(_currentPWM);
+        Serial.printf("Scanner Begin (reverse: %s)\n", _reverse ? "true" : "false");
+        if (_motor) _motor->drive(_reverse ? -_currentPWM : _currentPWM);
     }
 
     void run() {
@@ -48,7 +50,7 @@ public:
                 Serial.println("Scanner Done");
                 _motor->stop();
             } else {
-                _motor->drive(_currentPWM);
+                _motor->drive(_reverse ? -_currentPWM : _currentPWM);
             }
             _timerStart = now;
         }
