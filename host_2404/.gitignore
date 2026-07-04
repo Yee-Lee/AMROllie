@@ -10,6 +10,12 @@ ros2_ws/src/micro_ros_agent/
 ros2_ws/src/uros/
 ros2_ws/src/ros2.repos
 
+# =============================
+# SLAM & NAV
+# =============================
+slam/maps/*
+joystick/ps4_config.yaml
+
 # ==============================
 # Python / C++ Caches
 # ==============================
