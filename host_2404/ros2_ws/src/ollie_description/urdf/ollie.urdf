@@ -1,54 +1,118 @@
 <?xml version="1.0"?>
 <robot name="ollie">
 
+  <!-- 1. 新增 base_footprint (投影在地面的原點，z=0) -->
+  <link name="base_footprint"/>
+
+  <joint name="base_footprint_joint" type="fixed">
+    <parent link="base_footprint"/>
+    <child link="base_link"/>
+    <!-- 底盤離地高度 10.5mm = 0.0105m -->
+    <origin xyz="0 0 0.0105" rpy="0 0 0"/>
+  </joint>
+
+  <!-- 2. base_link: 定義為「車體底部的中心」 -->
   <link name="base_link">
     <visual>
+      <!-- 因為 base_link 在底部，圓柱(長0.10)需往上抬一半(0.05) -->
+      <origin xyz="0 0 0.05" rpy="0 0 0"/>
       <geometry>
-        <box size="0.26 0.16 0.055"/>
+        <cylinder radius="0.135" length="0.10"/>
       </geometry>
       <material name="blue">
         <color rgba="0.2 0.2 0.8 1"/>
       </material>
     </visual>
+    <!-- 補上 collision (碰撞箱)，導航避障時會計算這個體積 -->
+    <collision>
+      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.135" length="0.10"/>
+      </geometry>
+    </collision>
   </link>
 
+  <!-- 3. 左輪 -->
   <link name="left_wheel">
     <visual>
       <origin rpy="1.5708 0 0" xyz="0 0 0"/>
       <geometry>
-        <cylinder radius="0.033" length="0.024"/>
+        <cylinder radius="0.0325" length="0.014"/>
       </geometry>
       <material name="black">
         <color rgba="0.1 0.1 0.1 1"/>
       </material>
     </visual>
+    <collision>
+      <origin rpy="1.5708 0 0" xyz="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.0325" length="0.014"/>
+      </geometry>
+    </collision>
   </link>
 
+  <joint name="left_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="left_wheel"/>
+    <!-- 輪軸離底盤高 22mm = 0.022m，直接使用你的量測值！ -->
+    <origin xyz="-0.005 0.095 0.022" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+
+  <!-- 4. 右輪 -->
   <link name="right_wheel">
     <visual>
       <origin rpy="1.5708 0 0" xyz="0 0 0"/>
       <geometry>
-        <cylinder radius="0.033" length="0.024"/>
+        <cylinder radius="0.0325" length="0.014"/>
       </geometry>
       <material name="black">
         <color rgba="0.1 0.1 0.1 1"/>
       </material>
     </visual>
+    <collision>
+      <origin rpy="1.5708 0 0" xyz="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.0325" length="0.014"/>
+      </geometry>
+    </collision>
   </link>
 
+  <joint name="right_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="right_wheel"/>
+    <origin xyz="-0.005 -0.095 0.022" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+
+  <!-- 5. 萬向輪 (Caster) -->
   <link name="caster_wheel">
     <visual>
       <geometry>
-        <sphere radius="0.01"/>
+        <sphere radius="0.0075"/> <!-- 半徑 0.75cm -->
       </geometry>
       <material name="grey">
         <color rgba="0.6 0.6 0.6 1"/>
       </material>
     </visual>
+    <collision>
+      <geometry>
+        <sphere radius="0.0075"/>
+      </geometry>
+    </collision>
   </link>
 
+  <joint name="caster_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="caster_wheel"/>
+    <!-- 高度修正：為了讓半徑0.75cm的球體剛好碰到地面，相對於離地高 1.05cm 的 base_link，其中心點 Z 必須是 -0.003m -->
+    <origin xyz="0.095 0 -0.003" rpy="0 0 0"/>
+  </joint>
+
+  <!-- 6. 光達 (LiDAR) -->
   <link name="base_laser">
     <visual>
+      <!-- 雷達自己的繪製中心微調 -->
       <origin xyz="0 0 0.015" rpy="0 0 0"/>
       <geometry>
         <cylinder radius="0.02" length="0.02"/>
@@ -59,32 +123,14 @@
     </visual>
   </link>
 
-  <joint name="left_wheel_joint" type="fixed">
-    <parent link="base_link"/>
-    <child link="left_wheel"/>
-    <origin xyz="0.025 0.068 -0.0395" rpy="0 0 0"/>
-    <axis xyz="0 1 0"/>
-  </joint>
-
-  <joint name="right_wheel_joint" type="fixed">
-    <parent link="base_link"/>
-    <child link="right_wheel"/>
-    <origin xyz="0.025 -0.068 -0.0395" rpy="0 0 0"/>
-    <axis xyz="0 1 0"/>
-  </joint>
-
-  <joint name="caster_joint" type="fixed">
-    <parent link="base_link"/>
-    <child link="caster_wheel"/>
-    <origin xyz="-0.07 0 -0.0625" rpy="0 0 0"/>
-  </joint>
-
   <joint name="lidar_joint" type="fixed">
     <parent link="base_link"/>
     <child link="base_laser"/>
-    <origin xyz="0.015 -0.005 0.0425" rpy="0 0 -0.0873"/>
+    <!-- 高度修正：離地 8cm，扣除 base_link 離地 1.05cm，相對高度 Z = 0.0695m -->
+    <origin xyz="0.095 0 0.0695" rpy="0 0 0"/>
   </joint>
 
+  <!-- 7. 超音波感測器 (左) -->
   <link name="left_ultrasonic_link">
     <visual>
       <geometry>
@@ -99,9 +145,12 @@
   <joint name="left_ultrasonic_joint" type="fixed">
     <parent link="base_link"/>
     <child link="left_ultrasonic_link"/>
-    <origin xyz="0.095 0.04 -0.0525" rpy="0 0 0.1745"/>
+    <!-- 高度修正：離地 4cm，扣除 base_link 離地 1.05cm，相對高度 Z = 0.0295m -->
+    <!-- 角度修正：atan(4.5/11) = 0.3882 rad -->
+    <origin xyz="0.11 0.045 0.0295" rpy="0 0 0.3882"/>
   </joint>
 
+  <!-- 8. 超音波感測器 (右) -->
   <link name="right_ultrasonic_link">
     <visual>
       <geometry>
@@ -116,7 +165,9 @@
   <joint name="right_ultrasonic_joint" type="fixed">
     <parent link="base_link"/>
     <child link="right_ultrasonic_link"/>
-    <origin xyz="0.095 -0.04 -0.0525" rpy="0 0 -0.1745"/>
+    <!-- 高度修正：離地 4cm，扣除 base_link 離地 1.05cm，相對高度 Z = 0.0295m -->
+    <!-- 角度修正：atan(-4.5/11) = -0.3882 rad -->
+    <origin xyz="0.11 -0.045 0.0295" rpy="0 0 -0.3882"/>
   </joint>
 
 </robot>
